@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS appeals(id uuid PRIMARY KEY,decision_id uuid UNIQUE N
 CREATE TABLE IF NOT EXISTS resolutions(id uuid PRIMARY KEY,appeal_id uuid UNIQUE NOT NULL REFERENCES appeals(id),actor_id uuid NOT NULL REFERENCES users(id),outcome text NOT NULL,action text NOT NULL,rationale text NOT NULL,policy_id uuid NOT NULL REFERENCES policies(id),manual boolean NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS analyses(id uuid PRIMARY KEY,case_id uuid REFERENCES cases(id),appeal_id uuid REFERENCES appeals(id),version_id uuid NOT NULL REFERENCES content_versions(id),policy_id uuid NOT NULL REFERENCES policies(id),output jsonb NOT NULL,mode text NOT NULL,model text NOT NULL,prompt_version text NOT NULL DEFAULT '1',created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS jobs(id uuid PRIMARY KEY,case_id uuid REFERENCES cases(id),appeal_id uuid REFERENCES appeals(id),version_id uuid NOT NULL REFERENCES content_versions(id),policy_id uuid NOT NULL REFERENCES policies(id),status text NOT NULL DEFAULT 'QUEUED',attempts int NOT NULL DEFAULT 0,lease_token uuid,lease_until timestamptz,error text,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS ai_credentials(id uuid PRIMARY KEY,user_id uuid NOT NULL REFERENCES users(id),provider text NOT NULL,model text NOT NULL,base_url text,ciphertext text NOT NULL,nonce text NOT NULL,key_suffix text NOT NULL,status text NOT NULL DEFAULT 'VERIFIED',verified_at timestamptz,version int NOT NULL DEFAULT 1,active boolean NOT NULL DEFAULT true,created_at timestamptz NOT NULL DEFAULT now(),revoked_at timestamptz);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS credential_id uuid REFERENCES ai_credentials(id);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS credential_version int;
 CREATE TABLE IF NOT EXISTS audit(id uuid PRIMARY KEY,actor_id uuid REFERENCES users(id),action text NOT NULL,resource_id text NOT NULL,detail jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS idempotency(scope text PRIMARY KEY,hash text NOT NULL,response jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS rate_limits(key text PRIMARY KEY,count int NOT NULL,expires_at timestamptz NOT NULL);
@@ -22,3 +26,4 @@ CREATE INDEX IF NOT EXISTS analyses_case_idx ON analyses(case_id,created_at);
 CREATE INDEX IF NOT EXISTS analyses_appeal_idx ON analyses(appeal_id,created_at);
 CREATE INDEX IF NOT EXISTS content_owner_idx ON contents(author_id);
 CREATE INDEX IF NOT EXISTS audit_time_idx ON audit(created_at,id);
+CREATE INDEX IF NOT EXISTS ai_credentials_user_idx ON ai_credentials(user_id,active);

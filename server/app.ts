@@ -23,6 +23,9 @@ import {
   AppealInput,
   ResolutionInput,
   PolicyInput,
+  AiVerifyInput,
+  AiConnectInput,
+  AiModelPatch,
   type User,
 } from "../shared/contracts.js";
 import {
@@ -39,6 +42,17 @@ import {
   resolveAppeal,
   enqueue,
 } from "./service.js";
+import {
+  publicRegistry,
+  verify as verifyProvider,
+  listModels,
+  validateCustomBaseUrl,
+  ProviderError,
+  errorMessage,
+  type ErrorCode,
+} from "./providers.js";
+import { encryptKey, maskSuffix } from "./crypto.js";
+import { activeCredential, resolveCredential, metadata } from "./credentials.js";
 export type Config = { origin: string; production: boolean; aiMode: string };
 type Authed = Request & {
   user: User;
@@ -562,7 +576,21 @@ export function createApp(db: Database, config: Config) {
             "UPDATE cases SET status='PENDING_ANALYSIS',revision=revision+1 WHERE id=$1",
             [c.id],
           );
-          return { jobId: await enqueue(q, c), status: "QUEUED" };
+          // This is the explicit, user-requested AI action: tag the job with the
+          // requesting moderator's own active credential so the worker uses THEIR
+          // key. With no personal credential, it falls to the server env provider.
+          const cred = await activeCredential(q, r.user.id);
+          const jobCred = cred
+            ? {
+                userId: r.user.id,
+                credentialId: cred.id,
+                credentialVersion: cred.version,
+              }
+            : null;
+          return {
+            jobId: await enqueue(q, c, null, jobCred),
+            status: "QUEUED",
+          };
         }),
         202,
       ),
@@ -868,6 +896,195 @@ export function createApp(db: Database, config: Config) {
       ensure(j, 404, "NOT_FOUND", "Job not found");
       return send(s, j);
     }),
+  );
+  // ---------------------------------------------------------------------------
+  // Bring-Your-Own-Key: AI provider connection. Every route operates ONLY on the
+  // caller's own credential. Admins get no special access to others' keys here.
+  // Secret material (plaintext, ciphertext, nonce) is never returned.
+  // ---------------------------------------------------------------------------
+  const providerErrorCode = (e: unknown): ErrorCode =>
+    e instanceof ProviderError ? e.code : "OUTAGE";
+  app.get(
+    "/api/v1/ai/providers",
+    wrap(async (_r, s) => send(s, publicRegistry())),
+  );
+  app.get(
+    "/api/v1/ai/connection",
+    wrap(async (r, s) => {
+      const row = await activeCredential(db, r.user.id);
+      return send(s, row ? metadata(row) : null);
+    }),
+  );
+  app.post(
+    "/api/v1/ai/connection/verify",
+    write,
+    wrap(async (r, s) => {
+      ensure(
+        await throttle(db, "ai-verify:" + r.user.id, 20, 300),
+        429,
+        "RATE_LIMIT",
+        "Too many verification attempts. Try again shortly.",
+      );
+      const b = AiVerifyInput.parse(r.body);
+      try {
+        const models = await verifyProvider(b.provider, b.apiKey, b.baseUrl);
+        return send(s, { ok: true, models });
+      } catch (e) {
+        const code = providerErrorCode(e);
+        return send(s, { ok: false, error: { code, message: errorMessage(code) } });
+      }
+    }),
+  );
+  app.get(
+    "/api/v1/ai/connection/models",
+    wrap(async (r, s) => {
+      ensure(
+        await throttle(db, "ai-models:" + r.user.id, 30, 300),
+        429,
+        "RATE_LIMIT",
+        "Too many requests. Try again shortly.",
+      );
+      const row = await activeCredential(db, r.user.id);
+      ensure(row, 404, "NO_CONNECTION", "No AI connection is configured");
+      const cred = await resolveCredential(db, row.id, row.version, r.user.id);
+      try {
+        const models = await listModels(
+          cred.provider,
+          cred.apiKey,
+          cred.baseUrl ?? undefined,
+        );
+        return send(s, { ok: true, models });
+      } catch (e) {
+        const code = providerErrorCode(e);
+        return send(s, { ok: false, error: { code, message: errorMessage(code) } });
+      }
+    }),
+  );
+  app.post(
+    "/api/v1/ai/connection",
+    write,
+    wrap(async (r, s) => {
+      const b = AiConnectInput.parse(r.body);
+      // Verify (non-generating) OUTSIDE the write transaction so a slow provider
+      // call never holds the global mutation lock. A failed connection is never
+      // persisted as verified.
+      let normalizedBase: string | null = b.baseUrl ?? null;
+      try {
+        if (b.provider === "custom") {
+          ensure(
+            b.baseUrl,
+            400,
+            "BASE_URL_REQUIRED",
+            "A base URL is required for a custom provider",
+          );
+          normalizedBase = await validateCustomBaseUrl(b.baseUrl);
+        }
+        await verifyProvider(b.provider, b.apiKey, b.baseUrl);
+      } catch (e) {
+        const code = providerErrorCode(e);
+        throw new AppError(422, code, errorMessage(code));
+      }
+      return send(
+        s,
+        await mutation(r, async (q) => {
+          const prior = await activeCredential(q, r.user.id);
+          const version = prior ? prior.version + 1 : 1;
+          const credId = uid();
+          const { ciphertext, nonce } = encryptKey(b.apiKey, {
+            userId: r.user.id,
+            credentialId: credId,
+            version,
+          });
+          if (prior)
+            await q.query(
+              "UPDATE ai_credentials SET active=false,revoked_at=now() WHERE user_id=$1 AND active=true",
+              [r.user.id],
+            );
+          await q.query(
+            "INSERT INTO ai_credentials(id,user_id,provider,model,base_url,ciphertext,nonce,key_suffix,status,verified_at,version,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'VERIFIED',now(),$9,true)",
+            [
+              credId,
+              r.user.id,
+              b.provider,
+              b.model,
+              normalizedBase,
+              ciphertext,
+              nonce,
+              maskSuffix(b.apiKey),
+              version,
+            ],
+          );
+          // Audit records lifecycle WITHOUT any secret value.
+          await audit(q, r.user.id, "AI_CONNECTION_SAVED", credId, {
+            provider: b.provider,
+            model: b.model,
+            version,
+            replaced: prior?.id ?? null,
+          });
+          const row = (await one(
+            q,
+            "SELECT * FROM ai_credentials WHERE id=$1",
+            [credId],
+          ))!;
+          return metadata(row as any);
+        }),
+        201,
+      );
+    }),
+  );
+  app.patch(
+    "/api/v1/ai/connection",
+    write,
+    wrap(async (r, s) =>
+      send(
+        s,
+        await mutation(r, async (q) => {
+          const b = AiModelPatch.parse(r.body);
+          const row = await activeCredential(q, r.user.id);
+          ensure(row, 404, "NO_CONNECTION", "No AI connection is configured");
+          await q.query(
+            "UPDATE ai_credentials SET model=$2 WHERE id=$1",
+            [row.id, b.model],
+          );
+          await audit(q, r.user.id, "AI_CONNECTION_MODEL_CHANGED", row.id, {
+            provider: row.provider,
+            model: b.model,
+            version: row.version,
+          });
+          const updated = (await one(
+            q,
+            "SELECT * FROM ai_credentials WHERE id=$1",
+            [row.id],
+          ))!;
+          return metadata(updated as any);
+        }),
+      ),
+    ),
+  );
+  app.delete(
+    "/api/v1/ai/connection",
+    write,
+    wrap(async (r, s) =>
+      send(
+        s,
+        await mutation(r, async (q) => {
+          const row = await activeCredential(q, r.user.id);
+          ensure(row, 404, "NO_CONNECTION", "No AI connection is configured");
+          // Revoke and OVERWRITE secret material so queued jobs cannot start with
+          // this credential. An already-submitted provider request may still
+          // finish; we do not promise cancellation.
+          await q.query(
+            "UPDATE ai_credentials SET active=false,status='REVOKED',revoked_at=now(),ciphertext='',nonce='' WHERE id=$1",
+            [row.id],
+          );
+          await audit(q, r.user.id, "AI_CONNECTION_DISCONNECTED", row.id, {
+            provider: row.provider,
+            version: row.version,
+          });
+          return { ok: true };
+        }),
+      ),
+    ),
   );
   app.use("/api", (_r, _s, next) =>
     next(new AppError(404, "NOT_FOUND", "API route not found")),

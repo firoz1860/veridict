@@ -105,6 +105,23 @@ Client behaviour: a 401 on any non-login request dispatches a `session-expired` 
 - **Endpoints:** `GET /status` (poll 5s) → `{ aiMode, aiConfigured, workerHealthy, heartbeat, jobs[] }`.
 - **Display:** AI mode (fixture clearly labelled "not live AI"; live shows "configured — not a verified live request", never conflating configuration with a verified call); worker health + last heartbeat; job counts by status. No secrets or raw env values are shown.
 
+## AI connection (BYOK) — setup modal + `/settings` (all authenticated roles)
+
+- **Purpose:** let a signed-in user connect their own AI provider key so AI-assisted analysis they explicitly request runs on their key. Manual review always works without a key.
+- **Setup gate:** after login + session restore, the Shell fetches `GET /ai/connection`. When it is `null` and the browser session has not recorded a dismissal, an accessible "Connect your AI provider" modal opens once over the workspace. Dismissal stores **only** a boolean flag in `sessionStorage` (never the key) and the modal does not reopen on navigation; a persistent "Connect AI provider" action in the sidebar reopens it on demand.
+- **Endpoints:**
+  - `GET /ai/providers` → server-controlled registry `[{id,label,keyUrl,docsUrl,capabilities,supportsModelList,requiresBaseUrl}]` (internal base URLs are never exposed).
+  - `GET /ai/connection` → the caller's own metadata `{id,provider,model,baseUrl,keySuffix,status,verifiedAt,version,createdAt}` or `null`. Never ciphertext/nonce/plaintext.
+  - `POST /ai/connection/verify` `{provider,apiKey,model?,baseUrl?}` → `{ok, models?}` or `{ok:false, error:{code,message}}`. Never persists. Rate-limited per user.
+  - `POST /ai/connection` `{provider,apiKey,model,baseUrl?}` → verifies then encrypts + stores a new version (revoking the prior), returns metadata (201).
+  - `GET /ai/connection/models` → models for the saved credential (decrypted server-side). Pre-save listing uses `verify` instead, so a key is never placed in a URL.
+  - `PATCH /ai/connection` `{model}` → change the selected model on the owned credential.
+  - `DELETE /ai/connection` → disconnect: revoke, overwrite secret material, audit.
+- **Provider-specific "Get an API key" link:** from the server registry, opens in a new tab with `rel="noopener noreferrer"`; updates on provider change; never auto-redirects. The form notes API access/billing may differ from a consumer chat subscription.
+- **Error taxonomy (verify/models):** `INVALID_KEY`, `MODEL_UNAVAILABLE`, `UNSUPPORTED`, `INSUFFICIENT_CREDITS`, `RATE_LIMIT`, `OUTAGE`, `TIMEOUT`, `INVALID_OUTPUT`. Provider/model selection is preserved after a failure; a failed connection is never saved as verified.
+- **Actions:** select provider (confirm before switching if a key was entered), paste key (show/hide), verify, select/search model or enter a model ID manually, save; on `/settings`: reverify, change model, replace key (new version + revoke old), disconnect (accessible confirm dialog). The plaintext key is cleared from component state on save/close and never prefilled.
+- **States:** loading / verified / taxonomy error / saved; the modal explains which AI actions need a key and that manual review works without one.
+
 ---
 
 ## Error handling (all mutations)
@@ -123,7 +140,8 @@ Idempotency: a protected mutation retried after a failure reuses the same `Idemp
 
 ## Gaps / unsupported (deliberately not built in the UI)
 
-- No notifications, profile editing, settings, uploads, or email — the backend has none.
+- No notifications, profile editing, uploads, or email — the backend has none. (A BYOK AI-connection `/settings` screen now exists; see above.)
+- Automatic (server-funded) analysis still uses the `AI_*` env provider when configured; a user's personal key is used only for AI work they explicitly request (the `/cases/:id/analyze` re-run). There is no silent fallback from a failed personal key to a shared key or fixture mode.
 - No clause-level diff endpoint (comparison is client-side).
 - Live-AI correctness cannot be asserted from the UI; status only reports configuration + worker health.
 - `/contents`, `/appeals`, `/policies`, `/policy-drafts` are capped lists (100 / version list) with no cursor; only `/cases` and `/audit` paginate.

@@ -12,7 +12,9 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Edit `.env`: set `SEED_PASSWORD` to a strong password of at least 12 characters. Set `AI_MODE=fixture` for an explicitly labeled deterministic demonstration, or `AI_MODE=live` with your `AI_API_KEY` and a JSON-mode-compatible `AI_MODEL` for real AI review.
+Edit `.env`: set `SEED_PASSWORD` to a strong password of at least 12 characters. Set `AI_MODE=fixture` for an explicitly labeled deterministic demonstration, or `AI_MODE=live` with your `AI_API_KEY` and a JSON-mode-compatible `AI_MODEL` for real AI review (this is the server-funded provider used for automatic analysis).
+
+For the Bring-Your-Own-Key (BYOK) feature, set `AI_ENCRYPTION_KEY` to the base64 encoding of 32 random bytes (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`); the API and the worker must share the same value or saved keys cannot be decrypted. Set `AI_CUSTOM_ALLOWED_HOSTS` to a comma-separated allowlist of HTTPS hosts permitted for Custom OpenAI-compatible providers (leave empty to disallow custom endpoints). Signed-in users connect their own provider key from the "Connect your AI provider" setup modal or the `/settings` → AI connection screen; keys are verified, encrypted at rest (AES-256-GCM), and used only for AI work the user explicitly requests.
 
 ```bash
 npm run db:migrate

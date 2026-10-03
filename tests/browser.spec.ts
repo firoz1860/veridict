@@ -7,6 +7,12 @@ async function login(page: any, role: string) {
     .fill("browser-test-password");
   await page.getByRole("button", { name: "Sign in to workspace" }).click();
   await expect(page.getByRole("main")).toBeVisible();
+  // First-login "Connect your AI provider" modal appears when no key is set;
+  // dismiss it so manual-review flows proceed (no key is required for them).
+  await page
+    .getByRole("button", { name: "Set up later" })
+    .click({ timeout: 5000 })
+    .catch(() => {});
 }
 test("connected moderation, independent appeal and restoration", async ({
   browser,

@@ -19,6 +19,7 @@ import {
   Link,
   useParams,
   useSearchParams,
+  useLocation,
 } from "react-router-dom";
 import {
   ShieldCheck,
@@ -45,8 +46,17 @@ import {
   EyeOff,
   Cpu,
   UserCheck,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { api, useData, clearSession, listApi } from "./api";
+import {
+  SetupGate,
+  AiConnectionSettings,
+  useConnection,
+  openSetup,
+} from "./AiConnection";
 import type {
   User,
   CaseRow,
@@ -340,6 +350,15 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
 }
 function Shell({ user, logout }: { user: User; logout: () => void }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("veridict.sidebar.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const location = useLocation();
+  const { conn } = useConnection();
   const staff = user.role !== "AUTHOR";
   const links = staff
     ? ([
@@ -356,47 +375,120 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
         ["/appeals", "My appeals", Scale],
         ["/policies", "Policies", BookOpen],
       ] as const);
+  // Index of the active nav item — drives the sliding indicator.
+  const activeIndex = links.findIndex(([to]) =>
+    to === "/"
+      ? location.pathname === "/"
+      : location.pathname === to || location.pathname.startsWith(to + "/"),
+  );
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("veridict.sidebar.collapsed", next ? "1" : "0");
+      } catch {
+        /* per-viewer convenience only */
+      }
+      return next;
+    });
+  }
   return (
     <Auth.Provider value={{ user, logout }}>
       <a href="#main" className="skip-link">
         Skip to content
       </a>
-      <div className="app-shell">
+      <SetupGate />
+      <div className={"app-shell" + (collapsed ? " collapsed" : "")}>
         <div
           className={open ? "sidebar-scrim show" : "sidebar-scrim"}
           onClick={() => setOpen(false)}
           aria-hidden="true"
         />
         <aside id="app-sidebar" className={open ? "sidebar open" : "sidebar"}>
-          <Link to="/" className="brand">
+          <Link to="/" className="brand" title="Veridict">
             <ShieldCheck />
-            Veridict<span>®</span>
+            <span className="brand-text">
+              Veridict<span>®</span>
+            </span>
           </Link>
           <div className="workspace-label">
             <span className="workspace-icon">V</span>
-            <div>
+            <div className="nav-text">
               Community workspace<small>Trust & safety team</small>
             </div>
           </div>
-          <div className="nav-label">WORKSPACE</div>
-          <nav>
-            {links.map(([to, label, Icon]) => (
-              <NavLink key={to} to={to} end onClick={() => setOpen(false)}>
+          <div className="nav-label nav-text">WORKSPACE</div>
+          <nav style={{ ["--active-index" as any]: activeIndex }}>
+            <span
+              className={"nav-indicator" + (activeIndex < 0 ? " hidden" : "")}
+              aria-hidden="true"
+            />
+            {links.map(([to, label, Icon], i) => (
+              <NavLink
+                key={to}
+                to={to}
+                end
+                title={label}
+                onClick={() => setOpen(false)}
+                style={{ animationDelay: `${i * 45}ms` }}
+              >
                 <Icon size={18} />
-                {label}
+                <span className="nav-text">{label}</span>
               </NavLink>
             ))}
           </nav>
           <div className="sidebar-bottom">
             <div className="human-note">
               <ShieldCheck size={18} />
-              <p>
+              <p className="nav-text">
                 AI advises.
                 <br />
                 <strong>You decide.</strong>
               </p>
             </div>
-            <button className="user-account" onClick={logout}>
+            <div className="ai-connection-nav">
+              {conn === null && (
+                <button
+                  type="button"
+                  className="ai-connect-cta"
+                  onClick={openSetup}
+                  title="Connect AI provider"
+                >
+                  <Cpu size={17} />
+                  <span className="nav-text">Connect AI provider</span>
+                </button>
+              )}
+              <NavLink
+                to="/settings"
+                className="ai-settings-link"
+                title="AI connection"
+                onClick={() => setOpen(false)}
+              >
+                <Settings size={17} />
+                <span className="nav-text">
+                  AI connection
+                  {conn ? (
+                    <small className="ai-dot connected" aria-label="connected" />
+                  ) : null}
+                </span>
+              </NavLink>
+            </div>
+            <button
+              type="button"
+              className="collapse-toggle"
+              onClick={toggleCollapsed}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={17} />
+              ) : (
+                <PanelLeftClose size={17} />
+              )}
+              <span className="nav-text">Collapse</span>
+            </button>
+            <button className="user-account" onClick={logout} title="Sign out">
               <span className="avatar">
                 {user.name
                   .split(" ")
@@ -404,7 +496,7 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
                   .slice(0, 2)
                   .join("")}
               </span>
-              <span>
+              <span className="nav-text">
                 {user.name}
                 <small>{human(user.role)}</small>
               </span>
@@ -462,6 +554,7 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
               <Route path="/content" element={<Content mine />} />
               <Route path="/community" element={<Content mine={false} />} />
               <Route path="/content/:id" element={<ContentDetail />} />
+              <Route path="/settings" element={<AiConnectionSettings />} />
               <Route
                 path="*"
                 element={<Empty text="This page does not exist." />}
