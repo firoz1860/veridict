@@ -21,6 +21,13 @@ services:
         sync: false
       - key: AI_MODEL
         sync: false
+      # Required for Bring-Your-Own-Key: base64 of 32 random bytes.
+      # The API and the in-process worker share this one value.
+      - key: AI_ENCRYPTION_KEY
+        sync: false
+      # Optional: comma-separated approved hosts for custom AI providers.
+      - key: AI_CUSTOM_ALLOWED_HOSTS
+        sync: false
       - key: RUN_WORKER
         value: "true"
       - key: DATABASE_URL
