@@ -12,3 +12,7 @@ Regression tests first reproduced the previous behavior: queued requests changed
 The browser test now explicitly waits for navigation and analysis completion before submitting its decision. Earlier test runs exposed timing failures, including a correctly rejected stale revision; the final run passed.
 
 External provider transport is mocked in the API tests. Browser tests use the explicitly labeled fixture provider. No paid model calls, production account mutations, credential rotations, or deployment were performed. These checks do not establish universal model compatibility or production PostgreSQL performance.
+
+## About page follow-up
+
+Production build and 32 unit/API tests passed. All 5 browser tests passed, including new mobile reduced-motion and desktop reveal checks, role tab interaction, overflow checks, and favicon loading. Desktop and mobile screenshots were inspected. No deployed password rotation was performed: the available Render connector cannot execute database writes, and the Neon project ID is not yet available.

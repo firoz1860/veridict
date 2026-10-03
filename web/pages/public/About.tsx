@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ShieldCheck,
@@ -19,6 +20,36 @@ import type { User } from "../../../shared/contracts";
 
 /* The public product introduction. Expressive but truthful: every claim
    maps to behaviour the Veridict backend actually implements. */
+
+function Reveal({
+  children,
+  className,
+  from = "left",
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  from?: "left" | "right";
+  delay?: number;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      className={className}
+      data-reveal={from}
+      initial={reduced ? false : { opacity: 0, x: from === "left" ? -32 : 32 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true, amount: 0.12 }}
+      transition={{
+        duration: reduced ? 0 : 0.55,
+        delay: reduced ? 0 : delay,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 const ANCHORS = [
   ["workflow", "Workflow"],
@@ -143,7 +174,14 @@ function HeroVisual() {
         </radialGradient>
       </defs>
       <circle cx="180" cy="180" r="150" fill="url(#vg)" />
-      <circle cx="180" cy="180" r="118" fill="none" stroke="#2b3237" strokeWidth="1" />
+      <circle
+        cx="180"
+        cy="180"
+        r="118"
+        fill="none"
+        stroke="#2b3237"
+        strokeWidth="1"
+      />
       <circle
         cx="180"
         cy="180"
@@ -160,8 +198,22 @@ function HeroVisual() {
         [62, 180],
       ].map(([x, y], i) => (
         <g key={i}>
-          <line x1="180" y1="180" x2={x} y2={y} stroke="#0f7481" strokeWidth="1.5" />
-          <circle cx={x} cy={y} r="18" fill="#1c2226" stroke="#45c0d2" strokeWidth="1.5" />
+          <line
+            x1="180"
+            y1="180"
+            x2={x}
+            y2={y}
+            stroke="#0f7481"
+            strokeWidth="1.5"
+          />
+          <circle
+            cx={x}
+            cy={y}
+            r="18"
+            fill="#1c2226"
+            stroke="#45c0d2"
+            strokeWidth="1.5"
+          />
         </g>
       ))}
       <circle cx="180" cy="180" r="34" fill="#0f7481" />
@@ -180,69 +232,255 @@ function HeroVisual() {
 function StageFigure({ kind }: { kind: 1 | 2 | 3 }) {
   if (kind === 1)
     return (
-      <svg viewBox="0 0 280 110" role="img" aria-label="Content, reports, and a pinned policy version entering a review">
+      <svg
+        viewBox="0 0 280 110"
+        role="img"
+        aria-label="Content, reports, and a pinned policy version entering a review"
+      >
         {[
           ["Content", 10],
           ["Reports", 42],
           ["Policy v3", 74],
         ].map(([label, y], i) => (
           <g key={i}>
-            <rect x="8" y={y as number} width="96" height="24" rx="5" fill="#f7f5f0" stroke="#e8e3d9" />
-            <text x="18" y={(y as number) + 16} fontSize="11" fill="#565a60" fontFamily="Inter, sans-serif">
+            <rect
+              x="8"
+              y={y as number}
+              width="96"
+              height="24"
+              rx="5"
+              fill="#f7f5f0"
+              stroke="#e8e3d9"
+            />
+            <text
+              x="18"
+              y={(y as number) + 16}
+              fontSize="11"
+              fill="#565a60"
+              fontFamily="Inter, sans-serif"
+            >
               {label}
             </text>
-            <line x1="104" y1={(y as number) + 12} x2="178" y2="55" stroke="#0f7481" strokeWidth="1.5" />
+            <line
+              x1="104"
+              y1={(y as number) + 12}
+              x2="178"
+              y2="55"
+              stroke="#0f7481"
+              strokeWidth="1.5"
+            />
           </g>
         ))}
-        <rect x="178" y="38" width="94" height="34" rx="7" fill="#e4f0f1" stroke="#bfdde1" />
-        <text x="225" y="59" fontSize="11" fill="#0c5a64" textAnchor="middle" fontFamily="Inter, sans-serif">
+        <rect
+          x="178"
+          y="38"
+          width="94"
+          height="34"
+          rx="7"
+          fill="#e4f0f1"
+          stroke="#bfdde1"
+        />
+        <text
+          x="225"
+          y="59"
+          fontSize="11"
+          fill="#0c5a64"
+          textAnchor="middle"
+          fontFamily="Inter, sans-serif"
+        >
           Review
         </text>
       </svg>
     );
   if (kind === 2)
     return (
-      <svg viewBox="0 0 280 110" role="img" aria-label="Deterministic checks and AI findings citing exact policy and content">
-        <rect x="8" y="10" width="120" height="40" rx="7" fill="#e4f0f1" stroke="#bfdde1" />
-        <text x="20" y="28" fontSize="10.5" fill="#0c5a64" fontFamily="Inter, sans-serif">
+      <svg
+        viewBox="0 0 280 110"
+        role="img"
+        aria-label="Deterministic checks and AI findings citing exact policy and content"
+      >
+        <rect
+          x="8"
+          y="10"
+          width="120"
+          height="40"
+          rx="7"
+          fill="#e4f0f1"
+          stroke="#bfdde1"
+        />
+        <text
+          x="20"
+          y="28"
+          fontSize="10.5"
+          fill="#0c5a64"
+          fontFamily="Inter, sans-serif"
+        >
           Deterministic
         </text>
-        <text x="20" y="42" fontSize="9" fill="#35656d" fontFamily="Inter, sans-serif">
+        <text
+          x="20"
+          y="42"
+          fontSize="9"
+          fill="#35656d"
+          fontFamily="Inter, sans-serif"
+        >
           exact match
         </text>
-        <rect x="8" y="60" width="120" height="40" rx="7" fill="#e7f5f8" stroke="#bfdde1" strokeDasharray="4 4" />
-        <text x="20" y="78" fontSize="10.5" fill="#0b6673" fontFamily="Inter, sans-serif">
+        <rect
+          x="8"
+          y="60"
+          width="120"
+          height="40"
+          rx="7"
+          fill="#e7f5f8"
+          stroke="#bfdde1"
+          strokeDasharray="4 4"
+        />
+        <text
+          x="20"
+          y="78"
+          fontSize="10.5"
+          fill="#0b6673"
+          fontFamily="Inter, sans-serif"
+        >
           AI finding
         </text>
-        <text x="20" y="92" fontSize="9" fill="#35656d" fontFamily="Inter, sans-serif">
+        <text
+          x="20"
+          y="92"
+          fontSize="9"
+          fill="#35656d"
+          fontFamily="Inter, sans-serif"
+        >
           cited span
         </text>
-        <line x1="128" y1="30" x2="188" y2="52" stroke="#0f7481" strokeWidth="1.5" />
-        <line x1="128" y1="80" x2="188" y2="58" stroke="#45c0d2" strokeWidth="1.5" strokeDasharray="4 4" />
-        <rect x="190" y="38" width="82" height="34" rx="7" fill="#f7f5f0" stroke="#e8e3d9" />
-        <text x="231" y="59" fontSize="10.5" fill="#565a60" textAnchor="middle" fontFamily="Inter, sans-serif">
+        <line
+          x1="128"
+          y1="30"
+          x2="188"
+          y2="52"
+          stroke="#0f7481"
+          strokeWidth="1.5"
+        />
+        <line
+          x1="128"
+          y1="80"
+          x2="188"
+          y2="58"
+          stroke="#45c0d2"
+          strokeWidth="1.5"
+          strokeDasharray="4 4"
+        />
+        <rect
+          x="190"
+          y="38"
+          width="82"
+          height="34"
+          rx="7"
+          fill="#f7f5f0"
+          stroke="#e8e3d9"
+        />
+        <text
+          x="231"
+          y="59"
+          fontSize="10.5"
+          fill="#565a60"
+          textAnchor="middle"
+          fontFamily="Inter, sans-serif"
+        >
           Citations
         </text>
       </svg>
     );
   return (
-    <svg viewBox="0 0 280 110" role="img" aria-label="A human decision, an author appeal, independent review, and retained history">
+    <svg
+      viewBox="0 0 280 110"
+      role="img"
+      aria-label="A human decision, an author appeal, independent review, and retained history"
+    >
       <rect x="8" y="40" width="78" height="30" rx="7" fill="#0f7481" />
-      <text x="47" y="59" fontSize="10.5" fill="#f2efe9" textAnchor="middle" fontFamily="Inter, sans-serif">
+      <text
+        x="47"
+        y="59"
+        fontSize="10.5"
+        fill="#f2efe9"
+        textAnchor="middle"
+        fontFamily="Inter, sans-serif"
+      >
         Decision
       </text>
-      <line x1="86" y1="55" x2="118" y2="55" stroke="#0f7481" strokeWidth="1.5" />
-      <rect x="118" y="40" width="60" height="30" rx="7" fill="#f7f5f0" stroke="#e8e3d9" />
-      <text x="148" y="59" fontSize="10" fill="#565a60" textAnchor="middle" fontFamily="Inter, sans-serif">
+      <line
+        x1="86"
+        y1="55"
+        x2="118"
+        y2="55"
+        stroke="#0f7481"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="118"
+        y="40"
+        width="60"
+        height="30"
+        rx="7"
+        fill="#f7f5f0"
+        stroke="#e8e3d9"
+      />
+      <text
+        x="148"
+        y="59"
+        fontSize="10"
+        fill="#565a60"
+        textAnchor="middle"
+        fontFamily="Inter, sans-serif"
+      >
         Appeal
       </text>
-      <line x1="178" y1="55" x2="210" y2="55" stroke="#0f7481" strokeWidth="1.5" />
-      <rect x="210" y="40" width="62" height="30" rx="7" fill="#e4f0f1" stroke="#bfdde1" />
-      <text x="241" y="59" fontSize="10" fill="#0c5a64" textAnchor="middle" fontFamily="Inter, sans-serif">
+      <line
+        x1="178"
+        y1="55"
+        x2="210"
+        y2="55"
+        stroke="#0f7481"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="210"
+        y="40"
+        width="62"
+        height="30"
+        rx="7"
+        fill="#e4f0f1"
+        stroke="#bfdde1"
+      />
+      <text
+        x="241"
+        y="59"
+        fontSize="10"
+        fill="#0c5a64"
+        textAnchor="middle"
+        fontFamily="Inter, sans-serif"
+      >
         Review
       </text>
-      <rect x="118" y="84" width="154" height="20" rx="5" fill="none" stroke="#cfc8b8" strokeDasharray="3 4" />
-      <text x="195" y="98" fontSize="9" fill="#696d73" textAnchor="middle" fontFamily="Inter, sans-serif">
+      <rect
+        x="118"
+        y="84"
+        width="154"
+        height="20"
+        rx="5"
+        fill="none"
+        stroke="#cfc8b8"
+        strokeDasharray="3 4"
+      />
+      <text
+        x="195"
+        y="98"
+        fontSize="9"
+        fill="#696d73"
+        textAnchor="middle"
+        fontFamily="Inter, sans-serif"
+      >
         retained history
       </text>
     </svg>
@@ -276,13 +514,19 @@ export default function About({ user }: { user: User | null }) {
     };
   }, [drawer]);
 
-  const workspaceHref = user ? (user.role === "AUTHOR" ? "/content" : "/") : "/";
+  const workspaceHref = user
+    ? user.role === "AUTHOR"
+      ? "/content"
+      : "/"
+    : "/";
   const workspaceLabel = user ? "Open workspace" : "Open review workspace";
 
   const onTabKey = (e: React.KeyboardEvent, i: number) => {
     let n = i;
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") n = (i + 1) % ROLES.length;
-    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") n = (i - 1 + ROLES.length) % ROLES.length;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown")
+      n = (i + 1) % ROLES.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+      n = (i - 1 + ROLES.length) % ROLES.length;
     else return;
     e.preventDefault();
     setRole(n);
@@ -334,16 +578,34 @@ export default function About({ user }: { user: User | null }) {
         aria-hidden={!drawer}
       >
         <div className="scrim" onClick={() => setDrawer(false)} />
-        <div className="drawer-panel" role="dialog" aria-label="Menu" aria-modal="true">
-          <button className="drawer-close" aria-label="Close menu" onClick={() => setDrawer(false)}>
+        <div
+          className="drawer-panel"
+          role="dialog"
+          aria-label="Menu"
+          aria-modal="true"
+        >
+          <button
+            className="drawer-close"
+            aria-label="Close menu"
+            onClick={() => setDrawer(false)}
+          >
             <X />
           </button>
           {ANCHORS.map(([id, label]) => (
-            <a key={id} href={"#" + id} onClick={() => setDrawer(false)} tabIndex={drawer ? 0 : -1}>
+            <a
+              key={id}
+              href={"#" + id}
+              onClick={() => setDrawer(false)}
+              tabIndex={drawer ? 0 : -1}
+            >
               {label}
             </a>
           ))}
-          <Link to={user ? workspaceHref : "/"} onClick={() => setDrawer(false)} tabIndex={drawer ? 0 : -1}>
+          <Link
+            to={user ? workspaceHref : "/"}
+            onClick={() => setDrawer(false)}
+            tabIndex={drawer ? 0 : -1}
+          >
             {user ? workspaceLabel : "Sign in"}
           </Link>
         </div>
@@ -353,15 +615,16 @@ export default function About({ user }: { user: User | null }) {
         <section className="public-hero on-dark">
           <div className="dot-grid" aria-hidden="true" />
           <div className="hero-inner">
-            <div className="hero-copy">
+            <Reveal className="hero-copy" from="left">
               <span className="eyebrow">Trust &amp; safety, accountable</span>
               <h1>
                 Context before <em>judgment.</em>
               </h1>
               <p>
-                Veridict is a text moderation workspace where evidence is linked to
-                exact policy, decisions are made by people, and every appeal gets an
-                independent hearing. AI assists the review — it never enforces it.
+                Veridict is a text moderation workspace where evidence is linked
+                to exact policy, decisions are made by people, and every appeal
+                gets an independent hearing. AI assists the review — it never
+                enforces it.
               </p>
               <div className="hero-cta">
                 <Link className="button" to={user ? workspaceHref : "/"}>
@@ -372,10 +635,13 @@ export default function About({ user }: { user: User | null }) {
                   Explore the workflow
                 </a>
               </div>
-            </div>
-            <div className="hero-visual">
+            </Reveal>
+            <Reveal className="hero-visual" from="right" delay={0.1}>
               <HeroVisual />
-            </div>
+              <span className="hero-visual-caption">
+                Evidence → human review → accountable outcome
+              </span>
+            </Reveal>
           </div>
         </section>
 
@@ -401,25 +667,36 @@ export default function About({ user }: { user: User | null }) {
                 "Appeals without independence",
                 "Appeals too often return to the person who decided. Veridict routes each appeal to an independent reviewer who had no part in the original case.",
               ],
-            ].map(([num, title, body]) => (
-              <div className="problem-item" key={num}>
+            ].map(([num, title, body], i) => (
+              <Reveal
+                className="problem-item"
+                key={num}
+                from={i % 2 ? "right" : "left"}
+                delay={i * 0.06}
+              >
                 <span className="num">{num}</span>
                 <h3>{title}</h3>
                 <p>{body}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </section>
 
         <hr className="section-divider" />
 
-        <section className="public-section" id="workflow" aria-labelledby="workflow-h">
+        <section
+          className="public-section"
+          id="workflow"
+          aria-labelledby="workflow-h"
+        >
           <div className="section-head">
             <span className="eyebrow">How a review moves</span>
-            <h2 id="workflow-h">Gather context, review evidence, decide and reconsider.</h2>
+            <h2 id="workflow-h">
+              Gather context, review evidence, decide and reconsider.
+            </h2>
             <p>
-              A single path from a flagged post to an accountable outcome. The diagrams
-              below are illustrative, not live moderation results.
+              A single path from a flagged post to an accountable outcome. The
+              diagrams below are illustrative, not live moderation results.
             </p>
           </div>
           <div className="workflow-stages">
@@ -440,14 +717,19 @@ export default function About({ user }: { user: User | null }) {
                 p: "A moderator records the decision. The author may appeal once; an independent reviewer resolves it. History is retained.",
               },
             ].map((s) => (
-              <div className="stage" key={s.n}>
+              <Reveal
+                className="stage"
+                key={s.n}
+                from={s.n === 2 ? "right" : "left"}
+                delay={(s.n - 1) * 0.06}
+              >
                 <span className="stage-no">{s.n}</span>
                 <h3>{s.t}</h3>
                 <p>{s.p}</p>
                 <div className="stage-figure">
                   <StageFigure kind={s.n as 1 | 2 | 3} />
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
           <div className="legend">
@@ -458,18 +740,29 @@ export default function About({ user }: { user: User | null }) {
               <span className="swatch ai" /> AI / automated recommendation
             </span>
           </div>
-          <p className="illustrative">Illustrative diagram — not a live assessment</p>
+          <p className="illustrative">
+            Illustrative diagram — not a live assessment
+          </p>
         </section>
 
         <hr className="section-divider" />
 
-        <section className="public-section" id="roles" aria-labelledby="roles-h">
+        <section
+          className="public-section"
+          id="roles"
+          aria-labelledby="roles-h"
+        >
           <div className="section-head">
             <span className="eyebrow">Who does what</span>
             <h2 id="roles-h">Four roles, clear boundaries.</h2>
           </div>
           <div className="roles-layout">
-            <div className="role-tabs" role="tablist" aria-label="Roles" ref={tabsRef}>
+            <div
+              className="role-tabs"
+              role="tablist"
+              aria-label="Roles"
+              ref={tabsRef}
+            >
               {ROLES.map((r, i) => {
                 const Icon = r.icon;
                 return (
@@ -503,7 +796,14 @@ export default function About({ user }: { user: User | null }) {
               tabIndex={0}
             >
               <h3>
-                <ActiveIcon size={22} style={{ verticalAlign: "-4px", marginRight: 8, color: "var(--accent)" }} />
+                <ActiveIcon
+                  size={22}
+                  style={{
+                    verticalAlign: "-4px",
+                    marginRight: 8,
+                    color: "var(--accent)",
+                  }}
+                />
                 {active.name}
               </h3>
               <p className="role-kicker">{active.kicker}</p>
@@ -521,16 +821,24 @@ export default function About({ user }: { user: User | null }) {
 
         <hr className="section-divider" />
 
-        <section className="public-section" id="principles" aria-labelledby="principles-h">
+        <section
+          className="public-section"
+          id="principles"
+          aria-labelledby="principles-h"
+        >
           <div className="section-head">
             <span className="eyebrow">What stays true</span>
             <h2 id="principles-h">Principles the system enforces.</h2>
           </div>
           <div className="principles-grid">
-            {PRINCIPLES.map((p) => {
+            {PRINCIPLES.map((p, i) => {
               const Icon = p.icon;
               return (
-                <div className="principle" key={p.title}>
+                <Reveal
+                  className="principle"
+                  key={p.title}
+                  from={i % 2 ? "right" : "left"}
+                >
                   <span className="p-icon">
                     <Icon size={20} />
                   </span>
@@ -538,7 +846,7 @@ export default function About({ user }: { user: User | null }) {
                     <h3>{p.title}</h3>
                     <p>{p.body}</p>
                   </div>
-                </div>
+                </Reveal>
               );
             })}
           </div>
@@ -575,7 +883,11 @@ export default function About({ user }: { user: User | null }) {
               Sign in to the review workspace. Access is limited to invited team
               members — there is no public registration.
             </p>
-            <Link className="button" to={user ? workspaceHref : "/"} style={{ marginTop: 10 }}>
+            <Link
+              className="button"
+              to={user ? workspaceHref : "/"}
+              style={{ marginTop: 10 }}
+            >
               {workspaceLabel}
               <ArrowRight size={18} />
             </Link>
@@ -591,9 +903,9 @@ export default function About({ user }: { user: User | null }) {
               Veridict<span>®</span>
             </Link>
             <p className="footer-about">
-              A text moderation workspace with evidence-linked AI assistance, human
-              decisions, independent appeals, immutable policy versions, and an audit
-              trail.
+              A text moderation workspace with evidence-linked AI assistance,
+              human decisions, independent appeals, immutable policy versions,
+              and an audit trail.
             </p>
           </div>
           <div className="footer-col">
