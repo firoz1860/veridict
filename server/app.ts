@@ -52,7 +52,11 @@ import {
   type ErrorCode,
 } from "./providers.js";
 import { encryptKey, maskSuffix } from "./crypto.js";
-import { activeCredential, resolveCredential, metadata } from "./credentials.js";
+import {
+  activeCredential,
+  resolveCredential,
+  metadata,
+} from "./credentials.js";
 export type Config = { origin: string; production: boolean; aiMode: string };
 type Authed = Request & {
   user: User;
@@ -585,6 +589,7 @@ export function createApp(db: Database, config: Config) {
                 userId: r.user.id,
                 credentialId: cred.id,
                 credentialVersion: cred.version,
+                model: cred.model,
               }
             : null;
           return {
@@ -743,6 +748,7 @@ export function createApp(db: Database, config: Config) {
           },
           original_actor: undefined,
           analysis: null,
+          analysisJob: null,
           permittedActions: [],
         });
       return send(s, a);
@@ -772,6 +778,57 @@ export function createApp(db: Database, config: Config) {
           await audit(q, r.user.id, "APPEAL_CLAIMED", a.id);
           return { id: a.id };
         }),
+      ),
+    ),
+  );
+  app.post(
+    "/api/v1/appeals/:id/analyze",
+    roles("REVIEWER"),
+    write,
+    wrap(async (r, s) =>
+      send(
+        s,
+        await mutation(r, async (q) => {
+          const b = Revision.parse(r.body);
+          const a = await appealDetail(q, id(r), r.user);
+          revision(a.revision, b.expectedRevision);
+          ensure(
+            a.permittedActions.includes("ANALYZE"),
+            403,
+            "FORBIDDEN",
+            "Claim this appeal with an independent reviewer account first",
+          );
+          ensure(
+            !a.analysisJob ||
+              !["QUEUED", "RUNNING"].includes(a.analysisJob.status),
+            409,
+            "JOB_ACTIVE",
+            "Analysis is already queued or running",
+          );
+          const cred = await activeCredential(q, r.user.id);
+          const jobId = await enqueue(
+            q,
+            { id: a.case_id, version_id: a.version_id, policy_id: a.policy_id },
+            a.id,
+            cred
+              ? {
+                  userId: r.user.id,
+                  credentialId: cred.id,
+                  credentialVersion: cred.version,
+                  model: cred.model,
+                }
+              : null,
+          );
+          await q.query(
+            "UPDATE appeals SET status='AWAITING_REEVALUATION',revision=revision+1 WHERE id=$1",
+            [a.id],
+          );
+          await audit(q, r.user.id, "APPEAL_ANALYSIS_REQUESTED", a.id, {
+            jobId,
+          });
+          return { jobId, status: "QUEUED" };
+        }),
+        202,
       ),
     ),
   );
@@ -931,7 +988,10 @@ export function createApp(db: Database, config: Config) {
         return send(s, { ok: true, models });
       } catch (e) {
         const code = providerErrorCode(e);
-        return send(s, { ok: false, error: { code, message: errorMessage(code) } });
+        return send(s, {
+          ok: false,
+          error: { code, message: errorMessage(code) },
+        });
       }
     }),
   );
@@ -956,7 +1016,10 @@ export function createApp(db: Database, config: Config) {
         return send(s, { ok: true, models });
       } catch (e) {
         const code = providerErrorCode(e);
-        return send(s, { ok: false, error: { code, message: errorMessage(code) } });
+        return send(s, {
+          ok: false,
+          error: { code, message: errorMessage(code) },
+        });
       }
     }),
   );
@@ -1042,10 +1105,10 @@ export function createApp(db: Database, config: Config) {
           const b = AiModelPatch.parse(r.body);
           const row = await activeCredential(q, r.user.id);
           ensure(row, 404, "NO_CONNECTION", "No AI connection is configured");
-          await q.query(
-            "UPDATE ai_credentials SET model=$2 WHERE id=$1",
-            [row.id, b.model],
-          );
+          await q.query("UPDATE ai_credentials SET model=$2 WHERE id=$1", [
+            row.id,
+            b.model,
+          ]);
           await audit(q, r.user.id, "AI_CONNECTION_MODEL_CHANGED", row.id, {
             provider: row.provider,
             model: b.model,
@@ -1119,24 +1182,22 @@ export function createApp(db: Database, config: Config) {
             code: e?.code,
           }),
         );
-      res
-        .status(status)
-        .json({
-          error: {
-            code,
-            message:
-              e instanceof ZodError
-                ? "Check the required fields"
-                : e instanceof AppError
-                  ? e.message
-                  : status === 409
-                    ? "This operation conflicts with an existing record"
-                    : "Request could not be completed",
-            fieldErrors:
-              e instanceof ZodError ? e.flatten().fieldErrors : undefined,
-          },
-          requestId: (req as Authed).requestId,
-        });
+      res.status(status).json({
+        error: {
+          code,
+          message:
+            e instanceof ZodError
+              ? "Check the required fields"
+              : e instanceof AppError
+                ? e.message
+                : status === 409
+                  ? "This operation conflicts with an existing record"
+                  : "Request could not be completed",
+          fieldErrors:
+            e instanceof ZodError ? e.flatten().fieldErrors : undefined,
+        },
+        requestId: (req as Authed).requestId,
+      });
     },
   );
   return app;

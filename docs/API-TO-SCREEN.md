@@ -145,3 +145,9 @@ Idempotency: a protected mutation retried after a failure reuses the same `Idemp
 - No clause-level diff endpoint (comparison is client-side).
 - Live-AI correctness cannot be asserted from the UI; status only reports configuration + worker health.
 - `/contents`, `/appeals`, `/policies`, `/policy-drafts` are capped lists (100 / version list) with no cursor; only `/cases` and `/audit` paginate.
+
+### Appeal analysis retry
+
+`POST /api/v1/appeals/:id/analyze` is available to the assigned independent reviewer from the appeal detail screen. It accepts `expectedRevision`, requires CSRF and an idempotency key, rejects active jobs and resolved appeals, and queues the requesting reviewer's credential plus model snapshot when connected. Otherwise it uses server analysis configuration. It returns HTTP 202 with `jobId` and `status`.
+
+Appeal detail includes `analysisJob` (status and sanitized error) for staff. Failed/pending retries do not authorize decisions using an earlier assessment; explicit manual review remains available. Resolution includes `visibility_applied`, which is false when a newer review governs content visibility.

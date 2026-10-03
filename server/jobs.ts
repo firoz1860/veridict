@@ -25,6 +25,7 @@ export async function runOne(
       user_id: string | null;
       credential_id: string | null;
       credential_version: number | null;
+      requested_model: string | null;
     }>(
       q,
       "SELECT * FROM jobs WHERE status='QUEUED' OR (status='RUNNING' AND lease_until<now() AND attempts<3) ORDER BY created_at,id LIMIT 1",
@@ -80,6 +81,11 @@ export async function runOne(
         job.credential_version!,
         job.user_id!,
       );
+    }
+    if (credential) {
+      if (!job.requested_model)
+        throw new Error("Missing requested model snapshot");
+      credential.model = job.requested_model;
     }
     const output = await analyze(
       policy,

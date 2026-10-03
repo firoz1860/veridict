@@ -202,7 +202,9 @@ export type AppealDetail = AppealRow & {
   originalPolicy: Policy;
   currentPolicy: Policy;
   analysis: Analysis | null;
+  analysisJob: { status: string; error: string | null } | null;
   resolution: {
+    visibility_applied: boolean;
     outcome: string;
     action: string;
     rationale: string;

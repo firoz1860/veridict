@@ -426,3 +426,78 @@ test("reports cannot create a competing case while an appeal is open", async () 
     409,
   );
 });
+
+test("historical appeal resolves without overriding a newer removal or blocking edits", async () => {
+  const made = (
+    await post("author", "/contents", { text: "Historical warning example." })
+  ).body.data;
+  async function finish(caseId: string, action: string) {
+    while (await runOne(db, "fixture")) {}
+    let c = (await get("moderator", `/cases/${caseId}`)).body.data;
+    await post("moderator", `/cases/${caseId}/claim`, {
+      expectedRevision: c.revision,
+    });
+    c = (await get("moderator", `/cases/${caseId}`)).body.data;
+    const r = await post("moderator", `/cases/${caseId}/decisions`, {
+      expectedRevision: c.revision,
+      action,
+      disposition: "MODIFY",
+      rationale: "Human review of the policy and current evidence.",
+      clauseKeys: [c.policy.clauses[0].key],
+      manualReview: true,
+    });
+    assert.equal(r.status, 200);
+    return r.body.data.id;
+  }
+  const original = await finish(made.caseId, "WARN");
+  assert.equal(
+    (
+      await post("author2", `/contents/${made.id}/reports`, {
+        reason: "Please review this content again.",
+      })
+    ).status,
+    201,
+  );
+  const newer = (
+    await db.query(
+      "SELECT id FROM cases WHERE content_id=$1 AND status<>'DECIDED'",
+      [made.id],
+    )
+  ).rows[0];
+  await finish(newer.id, "REMOVE");
+  const submitted = await post("author", `/decisions/${original}/appeals`, {
+    reason: "Please reconsider the original warning.",
+  });
+  assert.equal(submitted.status, 201);
+  let a = (await get("reviewer", `/appeals/${submitted.body.data.id}`)).body
+    .data;
+  await post("reviewer", `/appeals/${a.id}/claim`, {
+    expectedRevision: a.revision,
+  });
+  a = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  const resolved = await post("reviewer", `/appeals/${a.id}/resolve`, {
+    expectedRevision: a.revision,
+    outcome: "OVERTURNED",
+    action: "ALLOW",
+    rationale: "The original warning was not justified.",
+    policyId: a.currentPolicy.id,
+    manualReview: true,
+  });
+  assert.equal(resolved.status, 200);
+  assert.equal(resolved.body.data.visibilityApplied, false);
+  const detail = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  assert.equal(detail.resolution.visibility_applied, false);
+  assert.equal(
+    (await get("author", `/contents/${made.id}`)).body.data.visibility,
+    "REMOVED",
+  );
+  assert.equal(
+    (
+      await post("author", `/contents/${made.id}/versions`, {
+        expectedRevision: 1,
+        text: "A revised version after the appeal.",
+      })
+    ).status,
+    200,
+  );
+});

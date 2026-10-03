@@ -14,7 +14,7 @@ docker compose up -d
 
 Edit `.env`: set `SEED_PASSWORD` to a strong password of at least 12 characters. Set `AI_MODE=fixture` for an explicitly labeled deterministic demonstration, or `AI_MODE=live` with your `AI_API_KEY` and a JSON-mode-compatible `AI_MODEL` for real AI review (this is the server-funded provider used for automatic analysis).
 
-For the Bring-Your-Own-Key (BYOK) feature, set `AI_ENCRYPTION_KEY` to the base64 encoding of 32 random bytes (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`); the API and the worker must share the same value or saved keys cannot be decrypted. Set `AI_CUSTOM_ALLOWED_HOSTS` to a comma-separated allowlist of HTTPS hosts permitted for Custom OpenAI-compatible providers (leave empty to disallow custom endpoints). Signed-in users connect their own provider key from the "Connect your AI provider" setup modal or the `/settings` → AI connection screen; keys are verified, encrypted at rest (AES-256-GCM), and used only for AI work the user explicitly requests.
+For the Bring-Your-Own-Key (BYOK) feature, set `AI_ENCRYPTION_KEY` to the base64 encoding of 32 random bytes (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`); the API and the worker must share the same value or saved keys cannot be decrypted. Set `AI_CUSTOM_ALLOWED_HOSTS` to a comma-separated allowlist of HTTPS hosts permitted for Custom OpenAI-compatible providers (leave empty to disallow custom endpoints). Signed-in users connect their own provider key from the "Connect your AI provider" setup modal or the `/settings` → AI connection screen; key access is checked through model listing, secrets are encrypted at rest (AES-256-GCM), and used only for AI work the user explicitly requests.
 
 ```bash
 npm run db:migrate
@@ -39,18 +39,11 @@ The seed command creates these accounts with your `SEED_PASSWORD`. Existing acco
 | admin@veridict.local      | Policy administrator        |
 
 
-  Log in at http://localhost:5173 with any seeded account, password Veridict_gJiSi6JEGzeL:
-  - admin@veridict.local (policies + drafts)
-  - moderator@veridict.local (queue, case review, re-run analysis)
-  - reviewer@veridict.local (appeals)
-  - author@veridict.local (create content, appeal)
-  
-
 Share demonstration credentials privately. There is no public account registration. Use separate browser profiles for different roles, or log out before switching.
 
 ## Deploy yourself: Render + Vercel
 
-Full steps are in [DEPLOYMENT.md](DEPLOYMENT.md). Render runs the API, durable worker, and PostgreSQL. Vercel serves the frontend and proxies `/api` to Render so sessions stay same-origin. The ZIP does not contain credentials or a deployment.
+Full steps are in [deployment guide](docs/DEPLOYMENT.md). Render runs the API, durable worker, and PostgreSQL. Vercel serves the frontend and proxies `/api` to Render so sessions stay same-origin. The ZIP does not contain credentials or a deployment.
 
 ## Public introduction
 
@@ -98,8 +91,14 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-API integration tests use PGlite (embedded PostgreSQL) with actual SQL and real Express requests. Browser tests run a real frontend and API against an isolated embedded database and fixture provider. They do not mock all API routes. See `VERIFICATION.md` for the checks actually run on this package.
+API integration tests use PGlite (embedded PostgreSQL) with actual SQL and real Express requests. Browser tests run a real frontend and API against an isolated embedded database and fixture provider. They do not mock all API routes. See [verification notes](docs/VERIFICATION.md) for the checks actually run on this package.
 
 ## Deliberate boundaries
 
 Text only, one controlled community, invited demo accounts, no real social network, no automatic bans, no file attachments, no email. Content/appeal views show the latest 100 records; case and audit tables support pagination. Exact-match deterministic rules identify strings, not semantic intent. Context-sensitive interpretation is delegated to the configured model and ultimately a human. The source is deployment-ready but deployment and live provider validation require your own environment and keys.
+
+## Review integrity
+
+Appeals against historical decisions can be resolved without changing visibility governed by a newer review. The outcome records whether it changed visibility. Assigned independent reviewers can explicitly re-run appeal analysis with their own connected key; automatic work continues to use the server configuration. Failed retries require another successful run or explicit manual review.
+
+Personal requests pin the selected model when queued. Later model changes apply to future requests. Revoking or replacing a key prevents queued work from using that credential. Model listing checks access, not moderation compatibility or available credit; live provider validation requires an explicit analysis request. No claim is made that every listed model is compatible.

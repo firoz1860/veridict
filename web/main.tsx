@@ -227,7 +227,11 @@ function ConfirmDialog({
           <Button kind="secondary" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
-          <Button kind={danger ? "danger" : ""} onClick={onConfirm} disabled={busy}>
+          <Button
+            kind={danger ? "danger" : ""}
+            onClick={onConfirm}
+            disabled={busy}
+          >
             {busy ? "Working…" : confirmLabel}
           </Button>
         </div>
@@ -468,7 +472,10 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
                 <span className="nav-text">
                   AI connection
                   {conn ? (
-                    <small className="ai-dot connected" aria-label="connected" />
+                    <small
+                      className="ai-dot connected"
+                      aria-label="connected"
+                    />
                   ) : null}
                 </span>
               </NavLink>
@@ -867,7 +874,10 @@ function Findings({
                   </>
                 )}
               </span>
-              · {f.certainty === "SUPPORTED" ? "Supported evidence" : "Uncertain interpretation"}
+              ·{" "}
+              {f.certainty === "SUPPORTED"
+                ? "Supported evidence"
+                : "Uncertain interpretation"}
             </div>
             <blockquote>{f.policyQuote}</blockquote>
             <button
@@ -1220,8 +1230,8 @@ function CasePage() {
           }}
         >
           <p>
-            This removes the content from the community feed. It will show in the
-            author’s history and they can appeal once.
+            This removes the content from the community feed. It will show in
+            the author’s history and they can appeal once.
           </p>
           <div className="dialog-ref">
             {human(c.type)} · {c.author_name} — “{c.text.slice(0, 120)}
@@ -1392,7 +1402,33 @@ function AppealPage() {
             {user.role !== "AUTHOR" && (
               <>
                 <h3>Current assessment</h3>
+                {a.analysisJob && a.analysisJob.status !== "SUCCEEDED" && (
+                  <div className="notice" role="status">
+                    Latest analysis: {a.analysisJob.status.toLowerCase()}.
+                    {a.analysisJob.error && " " + a.analysisJob.error}
+                    {a.analysis &&
+                      " The assessment below is from an earlier run."}
+                  </div>
+                )}
                 <Findings analysis={a.analysis} text={a.text} />
+                {a.permittedActions.includes("ANALYZE") && (
+                  <Button
+                    kind="secondary"
+                    disabled={
+                      busy ||
+                      ["QUEUED", "RUNNING"].includes(
+                        a.analysisJob?.status || "",
+                      )
+                    }
+                    onClick={() =>
+                      submit(`/appeals/${id}/analyze`, {
+                        expectedRevision: a.revision,
+                      })
+                    }
+                  >
+                    Re-run appeal analysis
+                  </Button>
+                )}
                 <details>
                   <summary>Current policy · v{a.currentPolicy.version}</summary>
                   {a.currentPolicy.clauses.map((c) => (
@@ -1417,6 +1453,12 @@ function AppealPage() {
             <>
               <Badge value={a.resolution.outcome} />
               <h3>Final action: {a.resolution.action}</h3>
+              {!a.resolution.visibility_applied && (
+                <p className="notice">
+                  This outcome applies to the appealed decision. Content
+                  visibility remains governed by a newer review.
+                </p>
+              )}
               <p>{a.resolution.rationale}</p>
               <small>
                 Resolved {fmt(a.resolution.created_at)} · Policy{" "}
@@ -1513,7 +1555,13 @@ function AppealPage() {
                   </label>
                   <Button
                     type="submit"
-                    disabled={busy || (!a.analysis && !manual)}
+                    disabled={
+                      busy ||
+                      (!manual &&
+                        (!a.analysis ||
+                          (!!a.analysisJob &&
+                            a.analysisJob.status !== "SUCCEEDED")))
+                    }
                   >
                     Record final outcome
                   </Button>
@@ -1543,8 +1591,9 @@ function AppealPage() {
           }}
         >
           <p>
-            This is the final, recorded outcome of the appeal and sets the content’s
-            visibility accordingly. It cannot be edited afterward.
+            This records the final outcome of the appealed decision. It updates
+            content visibility only when no newer review exists. It cannot be
+            edited afterward.
           </p>
           <div className="dialog-ref">
             Outcome: <strong>{outcome}</strong> · Resulting action:{" "}
@@ -2122,10 +2171,10 @@ function Policies() {
           }}
         >
           <p>
-            Your current edits are saved first, then published as a new immutable
-            version. Unresolved cases and open appeals are scheduled for
-            re-evaluation against it. Decisions already made keep their original
-            policy version.
+            Your current edits are saved first, then published as a new
+            immutable version. Unresolved cases and open appeals are scheduled
+            for re-evaluation against it. Decisions already made keep their
+            original policy version.
           </p>
           <div className="dialog-ref">
             “{title}” · {clauses.length} clause{clauses.length === 1 ? "" : "s"}

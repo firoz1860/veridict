@@ -2,7 +2,8 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 // Encryption + custom-host allowlist must be set before the modules read them.
 process.env.AI_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
-process.env.AI_CUSTOM_ALLOWED_HOSTS = "ai.example.com,llm.internal-approved.com";
+process.env.AI_CUSTOM_ALLOWED_HOSTS =
+  "ai.example.com,llm.internal-approved.com";
 import { PGlite } from "@electric-sql/pglite";
 import request from "supertest";
 import { migrate, one, type Database } from "../server/db.js";
@@ -32,13 +33,19 @@ let handler: Handler = defaultHandler;
 function defaultHandler(url: string, init?: RequestInit) {
   const method = (init?.method || "GET").toUpperCase();
   if (method === "GET" && url.includes("/models"))
-    return { status: 200, body: { data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }] } };
+    return {
+      status: 200,
+      body: { data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }] },
+    };
   if (url.includes("/chat/completions"))
     return {
       status: 200,
       body: {
         choices: [
-          { finish_reason: "stop", message: { content: JSON.stringify(VALID_ANALYSIS) } },
+          {
+            finish_reason: "stop",
+            message: { content: JSON.stringify(VALID_ANALYSIS) },
+          },
         ],
       },
     };
@@ -81,7 +88,14 @@ before(async () => {
   await migrate(db);
   await seed(db, "test-password-12345");
   app = createApp(db, { origin: ORIGIN, production: false, aiMode: "fixture" });
-  for (const role of ["author", "moderator", "moderator2", "admin"]) {
+  for (const role of [
+    "author",
+    "moderator",
+    "moderator2",
+    "reviewer",
+    "reviewer2",
+    "admin",
+  ]) {
     const a = request.agent(app);
     clients[role] = a;
     const s = await a.get("/api/v1/auth/csrf");
@@ -90,7 +104,10 @@ before(async () => {
       .post("/api/v1/auth/login")
       .set("X-CSRF-Token", csrf[role])
       .set("Origin", ORIGIN)
-      .send({ email: `${role}@veridict.local`, password: "test-password-12345" });
+      .send({
+        email: `${role}@veridict.local`,
+        password: "test-password-12345",
+      });
     assert.equal(login.status, 200);
     csrf[role] = login.body.data.csrf;
   }
@@ -100,7 +117,12 @@ after(async () => {
   await db?.close();
 });
 
-function post(role: string, path: string, body: any, key = crypto.randomUUID()) {
+function post(
+  role: string,
+  path: string,
+  body: any,
+  key = crypto.randomUUID(),
+) {
   return clients[role]
     .post("/api/v1" + path)
     .set("Origin", ORIGIN)
@@ -108,7 +130,12 @@ function post(role: string, path: string, body: any, key = crypto.randomUUID()) 
     .set("Idempotency-Key", key)
     .send(body);
 }
-function del(role: string, path: string, body: any = {}, key = crypto.randomUUID()) {
+function del(
+  role: string,
+  path: string,
+  body: any = {},
+  key = crypto.randomUUID(),
+) {
   return clients[role]
     .delete("/api/v1" + path)
     .set("Origin", ORIGIN)
@@ -116,7 +143,12 @@ function del(role: string, path: string, body: any = {}, key = crypto.randomUUID
     .set("Idempotency-Key", key)
     .send(body);
 }
-function patch(role: string, path: string, body: any, key = crypto.randomUUID()) {
+function patch(
+  role: string,
+  path: string,
+  body: any,
+  key = crypto.randomUUID(),
+) {
   return clients[role]
     .patch("/api/v1" + path)
     .set("Origin", ORIGIN)
@@ -132,7 +164,9 @@ test("crypto: AES-256-GCM round-trip and AAD binding", () => {
   assert.notEqual(ciphertext, "sk-secret-123");
   assert.equal(decryptKey(ciphertext, nonce, parts), "sk-secret-123");
   // Wrong user, credential or version must fail authentication.
-  assert.throws(() => decryptKey(ciphertext, nonce, { ...parts, userId: "u2" }));
+  assert.throws(() =>
+    decryptKey(ciphertext, nonce, { ...parts, userId: "u2" }),
+  );
   assert.throws(() => decryptKey(ciphertext, nonce, { ...parts, version: 2 }));
   assert.throws(() =>
     decryptKey(ciphertext, nonce, { ...parts, credentialId: "c2" }),
@@ -157,13 +191,16 @@ test("SSRF: custom base URLs reject private, metadata, loopback, http and userin
       `expected rejection for ${u}`,
     );
   // Allowlisted host resolving to a public IP is accepted and normalized.
-  const ok = await validateCustomBaseUrl("https://ai.example.com/v1/", async () => [
-    "1.2.3.4",
-  ]);
+  const ok = await validateCustomBaseUrl(
+    "https://ai.example.com/v1/",
+    async () => ["1.2.3.4"],
+  );
   assert.equal(ok, "https://ai.example.com/v1");
   // Allowlisted host that resolves to a private IP (DNS rebinding) is rejected.
   await assert.rejects(
-    validateCustomBaseUrl("https://ai.example.com/v1", async () => ["10.0.0.9"]),
+    validateCustomBaseUrl("https://ai.example.com/v1", async () => [
+      "10.0.0.9",
+    ]),
     (e) => e instanceof ProviderError,
   );
 });
@@ -230,7 +267,9 @@ test("save returns only safe metadata; no plaintext/ciphertext leaves the server
   assert.ok(!("nonce" in meta));
   assert.ok(!("apiKey" in meta));
   // Stored at rest encrypted, not as plaintext.
-  const row = await one(db, "SELECT * FROM ai_credentials WHERE id=$1", [meta.id]);
+  const row = await one(db, "SELECT * FROM ai_credentials WHERE id=$1", [
+    meta.id,
+  ]);
   assert.notEqual(row!.ciphertext, "sk-live-abcd1234");
   assert.ok(row!.ciphertext.length > 0);
 });
@@ -245,7 +284,10 @@ test("cross-user isolation: others and admins cannot see or decrypt the owner's 
     "SELECT * FROM ai_credentials WHERE active=true AND user_id=(SELECT id FROM users WHERE email='moderator@veridict.local')",
   );
   // Decryption bound to the owner: another user's id cannot resolve it.
-  const other = await one(db, "SELECT id FROM users WHERE email='admin@veridict.local'");
+  const other = await one(
+    db,
+    "SELECT id FROM users WHERE email='admin@veridict.local'",
+  );
   await assert.rejects(
     resolveCredential(db, row!.id, row!.version, other!.id),
     (e: any) => e.status === 409,
@@ -271,7 +313,9 @@ test("worker uses the requesting moderator's credential and records the model", 
   });
   assert.equal(trig.status, 202);
   // The queued job carries the moderator's credential reference.
-  const job = await one(db, "SELECT * FROM jobs WHERE id=$1", [trig.body.data.jobId]);
+  const job = await one(db, "SELECT * FROM jobs WHERE id=$1", [
+    trig.body.data.jobId,
+  ]);
   assert.ok(job!.credential_id);
   assert.ok(job!.user_id);
   await runOne(db, "fixture"); // credential path ignores mode, uses mocked provider
@@ -307,7 +351,9 @@ test("personal-key failure fails the job with NO fallback to fixture/env", async
   handler = defaultHandler;
   const after = (await get("moderator", `/cases/${made.caseId}`)).body.data;
   assert.equal(after.status, "ANALYSIS_FAILED");
-  const job = await one(db, "SELECT * FROM jobs WHERE id=$1", [trig.body.data.jobId]);
+  const job = await one(db, "SELECT * FROM jobs WHERE id=$1", [
+    trig.body.data.jobId,
+  ]);
   assert.equal(job!.status, "FAILED");
   // No fixture fallback analysis was written for this failed run.
   assert.equal(after.decision, null);
@@ -337,7 +383,10 @@ test("change model patches the owned credential only", async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.data.model, "gpt-4o");
   // A user without a connection cannot patch.
-  assert.equal((await patch("moderator2", "/ai/connection", { model: "x" })).status, 404);
+  assert.equal(
+    (await patch("moderator2", "/ai/connection", { model: "x" })).status,
+    404,
+  );
 });
 
 test("disconnect removes usable secret material and blocks reuse", async () => {
@@ -348,13 +397,210 @@ test("disconnect removes usable secret material and blocks reuse", async () => {
   const res = await del("moderator", "/ai/connection");
   assert.equal(res.status, 200);
   assert.equal((await get("moderator", "/ai/connection")).body.data, null);
-  const row = await one(db, "SELECT * FROM ai_credentials WHERE id=$1", [before!.id]);
+  const row = await one(db, "SELECT * FROM ai_credentials WHERE id=$1", [
+    before!.id,
+  ]);
   assert.equal(row!.active, false);
   assert.equal(row!.status, "REVOKED");
   assert.equal(row!.ciphertext, ""); // secret material overwritten
-  const mod = await one(db, "SELECT id FROM users WHERE email='moderator@veridict.local'");
+  const mod = await one(
+    db,
+    "SELECT id FROM users WHERE email='moderator@veridict.local'",
+  );
   await assert.rejects(
     resolveCredential(db, before!.id, before!.version, mod!.id),
     (e: any) => e.status === 409,
+  );
+});
+
+test("queued paid request keeps the model selected when it was requested", async () => {
+  handler = defaultHandler;
+  await post("moderator", "/ai/connection", {
+    provider: "openai",
+    apiKey: "sk-test-placeholder",
+    model: "gpt-4o",
+  });
+  const made = (
+    await post("author", "/contents", { text: "Model pinning example." })
+  ).body.data;
+  while (await runOne(db, "fixture")) {}
+  let c = (await get("moderator", `/cases/${made.caseId}`)).body.data;
+  await post("moderator", `/cases/${c.id}/claim`, {
+    expectedRevision: c.revision,
+  });
+  c = (await get("moderator", `/cases/${c.id}`)).body.data;
+  assert.equal(
+    (
+      await post("moderator", `/cases/${c.id}/analyze`, {
+        expectedRevision: c.revision,
+      })
+    ).status,
+    202,
+  );
+  assert.equal(
+    (await patch("moderator", "/ai/connection", { model: "gpt-4o-mini" }))
+      .status,
+    200,
+  );
+  let actualModel = "";
+  handler = (url, init) => {
+    if (init?.method === "POST")
+      actualModel = JSON.parse(init.body as string).model;
+    return defaultHandler(url, init);
+  };
+  await runOne(db, "fixture");
+  handler = defaultHandler;
+  assert.equal(actualModel, "gpt-4o");
+  assert.equal(
+    (await get("moderator", `/cases/${c.id}`)).body.data.analysis.model,
+    "openai:gpt-4o",
+  );
+});
+
+test("assigned independent reviewer can retry appeal analysis with their own key", async () => {
+  handler = defaultHandler;
+  await post("reviewer", "/ai/connection", {
+    provider: "openai",
+    apiKey: "sk-reviewer-placeholder",
+    model: "gpt-4o-mini",
+  });
+  const made = (
+    await post("author", "/contents", {
+      text: "Appeal retry example scam.invalid",
+    })
+  ).body.data;
+  while (await runOne(db, "fixture")) {}
+  let c = (await get("moderator", `/cases/${made.caseId}`)).body.data;
+  await post("moderator", `/cases/${c.id}/claim`, {
+    expectedRevision: c.revision,
+  });
+  c = (await get("moderator", `/cases/${c.id}`)).body.data;
+  const decision = await post("moderator", `/cases/${c.id}/decisions`, {
+    expectedRevision: c.revision,
+    action: "REMOVE",
+    disposition: "MODIFY",
+    rationale: "The configured prohibited link is present.",
+    clauseKeys: ["LINKS"],
+    manualReview: true,
+  });
+  assert.equal(decision.status, 200);
+  const appeal = await post(
+    "author",
+    `/decisions/${decision.body.data.id}/appeals`,
+    { reason: "This was an educational quotation." },
+  );
+  assert.equal(appeal.status, 201);
+  await runOne(db, "unavailable");
+  let a = (await get("reviewer", `/appeals/${appeal.body.data.id}`)).body.data;
+  await post("reviewer", `/appeals/${a.id}/claim`, {
+    expectedRevision: a.revision,
+  });
+  a = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  for (const role of ["author", "moderator", "reviewer2"])
+    assert.equal(
+      (
+        await post(role, `/appeals/${a.id}/analyze`, {
+          expectedRevision: a.revision,
+        })
+      ).status,
+      403,
+    );
+  const retry = await post("reviewer", `/appeals/${a.id}/analyze`, {
+    expectedRevision: a.revision,
+  });
+  assert.equal(retry.status, 202);
+  a = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  assert.equal(a.analysisJob.status, "QUEUED");
+  assert.equal(
+    (
+      await post("reviewer", `/appeals/${a.id}/analyze`, {
+        expectedRevision: a.revision,
+      })
+    ).status,
+    409,
+  );
+  const job = await one(db, "SELECT * FROM jobs WHERE id=$1", [
+    retry.body.data.jobId,
+  ]);
+  const owner = await one(
+    db,
+    "SELECT id FROM users WHERE email='reviewer@veridict.local'",
+  );
+  assert.equal(job!.user_id, owner!.id);
+  await runOne(db, "fixture");
+  a = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  assert.equal(a.analysis.model, "openai:gpt-4o-mini");
+  assert.equal(a.analysisJob.status, "SUCCEEDED");
+  assert.equal(a.resolution, null);
+  // Failed reruns must not permit silently using the old successful assessment.
+  assert.equal(
+    (
+      await post("reviewer", `/appeals/${a.id}/analyze`, {
+        expectedRevision: a.revision,
+      })
+    ).status,
+    202,
+  );
+  handler = () => ({ status: 401, body: { error: "revoked" } });
+  await runOne(db, "fixture");
+  handler = defaultHandler;
+  a = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  assert.equal(a.analysisJob.status, "FAILED");
+  const body = {
+    expectedRevision: a.revision,
+    outcome: "OVERTURNED",
+    action: "ALLOW",
+    rationale: "Independent reviewer accepts the context.",
+    policyId: a.currentPolicy.id,
+    manualReview: false,
+  };
+  assert.equal(
+    (await post("reviewer", `/appeals/${a.id}/resolve`, body)).status,
+    409,
+  );
+  assert.equal(
+    (
+      await post("reviewer", `/appeals/${a.id}/resolve`, {
+        ...body,
+        manualReview: true,
+      })
+    ).status,
+    200,
+  );
+  a = (await get("reviewer", `/appeals/${a.id}`)).body.data;
+  assert.equal(
+    (
+      await post("reviewer", `/appeals/${a.id}/analyze`, {
+        expectedRevision: a.revision,
+      })
+    ).status,
+    403,
+  );
+});
+
+test("repeatable migration backfills legacy jobs without changing model snapshots", async () => {
+  const job = await one(
+    db,
+    "SELECT * FROM jobs WHERE credential_id IS NOT NULL LIMIT 1",
+  );
+  assert.ok(job);
+  await db.query("UPDATE jobs SET requested_model=NULL WHERE id=$1", [job.id]);
+  await db.query("UPDATE ai_credentials SET model='legacy-model' WHERE id=$1", [
+    job.credential_id,
+  ]);
+  await migrate(db);
+  assert.equal(
+    (await one(db, "SELECT requested_model FROM jobs WHERE id=$1", [job.id]))!
+      .requested_model,
+    "legacy-model",
+  );
+  await db.query("UPDATE ai_credentials SET model='future-model' WHERE id=$1", [
+    job.credential_id,
+  ]);
+  await migrate(db);
+  assert.equal(
+    (await one(db, "SELECT requested_model FROM jobs WHERE id=$1", [job.id]))!
+      .requested_model,
+    "legacy-model",
   );
 });
