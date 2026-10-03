@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: veridict-api
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    preDeployCommand: npm run db:migrate
+    startCommand: npm start
+    healthCheckPath: /api/v1/health/live
+    maxShutdownDelaySeconds: 90
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: APP_ORIGIN
+        sync: false
+      - key: AI_MODE
+        value: live
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        sync: false
+      - key: RUN_WORKER
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: veridict-db
+          property: connectionString
+      - key: SEED_PASSWORD
+        sync: false
+
+databases:
+  - name: veridict-db
+    plan: basic-256mb
+    databaseName: veridict
+    user: veridict
+    ipAllowList: []

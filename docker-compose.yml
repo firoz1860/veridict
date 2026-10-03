@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: veridict
+      POSTGRES_PASSWORD: veridict
+      POSTGRES_DB: veridict
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veridict"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  db_data:
