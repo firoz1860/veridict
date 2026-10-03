@@ -51,3 +51,9 @@ Buttons (primary/secondary/text/danger/ghost-dark), badges (semantic), panels + 
 - `web/styles.css` — tokens + all component and layout styles (single stylesheet, sectioned).
 - `web/pages/public/About.tsx` — the expressive public introduction (lazy-loaded as a separate chunk).
 - `web/main.tsx` — app shell, routing, screens, shared components (`Button`, `Badge`, `ConfirmDialog`, `Findings`, …).
+
+## About page motion and brand assets
+
+The public page uses Framer Motion entrance reveals, alternating 32px left/right offsets with a 550ms ease-out. Reveals play once, use the viewport observer, and are disabled for reduced-motion preferences. The library stays in the lazy-loaded About route. Operational forms remain static.
+
+The public palette combines deep charcoal/teal hero surfaces, teal accents, cool neutral backgrounds, and high-contrast body copy. Cards use subtle borders and shadows. The SVG favicon reuses the Lucide ShieldCheck mark already used in the app; its license is shipped alongside it.

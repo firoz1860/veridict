@@ -2724,3 +2724,26 @@ a.content-card:hover {
   flex-direction: column;
   gap: 12px;
 }
+
+/* Public brand finish: deliberate color, restrained motion, readable surfaces. */
+.public { overflow-x: clip; --bg: #f6f8f8; --surface-sunken: #eef3f3; }
+.public-hero, .public-cta {
+  background: radial-gradient(ellipse at 85% 30%, #17454b 0, transparent 55%), #122126;
+}
+.public .hero-copy > p { color: #c1d0d2; }
+.public .hero-visual { padding: 16px; border: 1px solid #35545a; border-radius: 24px; background: #ffffff04; }
+.hero-visual-caption { color: #bfd3d6; text-align: center; font-size: 12px; letter-spacing: .025em; padding: 0 12px 18px; }
+.public .problem-item { border-top: 2px solid var(--accent-soft-border); padding-top: 24px; }
+.public .stage, .public .principle { border-color: #d4e1e2; box-shadow: 0 6px 24px #16393e06; }
+.public .stage { border-top: 3px solid var(--accent); }
+.public .stage:hover, .public .principle:hover { border-color: var(--accent); background: #fbfefe; }
+.public .role-panel { background: linear-gradient(135deg, #eef7f7, #fff); border-color: var(--accent-soft-border); }
+.public .faq-item[open] { background: var(--surface); }
+@media (prefers-reduced-motion: reduce) {
+  .public [data-reveal] { opacity: 1 !important; transform: none !important; }
+}
+.public > main { padding: 0; max-width: none; }
+@media (max-width: 1000px) {
+  .public .hero-copy { order: 0; }
+  .public .hero-visual { order: 1; }
+}

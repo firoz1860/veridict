@@ -172,3 +172,66 @@ test("dashboard and mobile layout render without overflow", async ({
   ).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test("About reveals remain readable on mobile with reduced motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/about");
+  const reveal = page.locator("[data-reveal]");
+  await expect(reveal.first()).toBeVisible();
+  for (const item of await reveal.all()) {
+    await item.scrollIntoViewIfNeeded();
+    await expect(item).toHaveCSS("opacity", "1");
+    await expect(item).toHaveCSS("transform", "none");
+  }
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("tab", { name: /Independent reviewer/ }).click();
+  await expect(page.getByRole("tabpanel")).toContainText(
+    "Cannot be the original decision maker",
+  );
+  const icon = await page.request.get("/favicon.svg");
+  expect(icon.status()).toBe(200);
+  expect(icon.headers()["content-type"]).toContain("image/svg+xml");
+  await page.goto("/about");
+  await expect(
+    page.getByRole("heading", { name: /Context before/i }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/about-mobile.png",
+    fullPage: true,
+  });
+});
+
+test("About paired entrances settle at the center without overflow", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/about");
+  const copy = page.locator(".hero-copy");
+  const visual = page.locator(".hero-visual");
+  await expect(copy).toHaveCSS("opacity", "1");
+  await expect(visual).toHaveCSS("opacity", "1");
+  await expect(copy).toHaveCSS("transform", "none");
+  await expect(visual).toHaveCSS("transform", "none");
+  for (const item of await page.locator("[data-reveal]").all()) {
+    await item.scrollIntoViewIfNeeded();
+    await expect(item).toHaveCSS("opacity", "1");
+  }
+  await page.evaluate(() => scrollTo(0, 0));
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/about-desktop.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+});
