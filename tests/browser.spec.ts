@@ -43,8 +43,11 @@ test("connected moderation, independent appeal and restoration", async ({
   await m
     .getByLabel("Decision rationale")
     .fill("The prohibited domain is explicitly present in this content.");
-  m.once("dialog", (d) => d.accept());
   await m.getByRole("button", { name: "Record decision" }).click();
+  await m
+    .getByRole("dialog")
+    .getByRole("button", { name: "Remove content", exact: true })
+    .click();
   await expect(m.getByText("decided", { exact: true })).toBeVisible();
   await p.reload();
   await p.getByText("View content & history").last().click();
@@ -69,14 +72,40 @@ test("connected moderation, independent appeal and restoration", async ({
     .getByLabel("Reasoning, including policy basis")
     .fill("The independent reviewer accepts the educational explanation.");
   await r.getByLabel("I have manually reviewed").check();
-  r.once("dialog", (d) => d.accept());
   await r.getByRole("button", { name: "Record final outcome" }).click();
+  await r
+    .getByRole("dialog")
+    .getByRole("button", { name: "Record outcome", exact: true })
+    .click();
   await expect(r.getByText("Final action: ALLOW")).toBeVisible();
   await p.goto("/content");
   await expect(p.getByText("visible", { exact: true })).toBeVisible();
   await author.close();
   await mod.close();
   await reviewer.close();
+});
+test("public about page introduces the product and routes to sign-in", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/about");
+  await expect(
+    page.getByRole("heading", { name: /Context before/i }),
+  ).toBeVisible();
+  // anchor navigation to the workflow section (scope to the primary nav)
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Workflow", exact: true })
+    .click();
+  await expect(page.locator("#workflow")).toBeVisible();
+  // primary CTA leads to the existing sign-in entry
+  await page
+    .getByRole("link", { name: "Open review workspace", exact: true })
+    .first()
+    .click();
+  await expect(page.getByRole("button", { name: "Sign in to workspace" })).toBeVisible();
+  expect(errors).toEqual([]);
 });
 test("dashboard and mobile layout render without overflow", async ({
   page,

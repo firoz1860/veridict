@@ -42,9 +42,14 @@ Share demonstration credentials privately. There is no public account registrati
 
 Full steps are in [DEPLOYMENT.md](DEPLOYMENT.md). Render runs the API, durable worker, and PostgreSQL. Vercel serves the frontend and proxies `/api` to Render so sessions stay same-origin. The ZIP does not contain credentials or a deployment.
 
+## Public introduction
+
+A public product introduction lives at `/about` (no login required). The sign-in screen at `/` links to it, and its primary CTA leads back to sign-in. The authenticated dashboard stays at `/`.
+
 ## Project layout
 
-- `web/`: React UI, responsive styling, typed API client.
+- `web/`: React UI, responsive styling, typed API client. Editorial design system in `web/styles.css`; public page in `web/pages/public/About.tsx` (lazy-loaded).
+- `docs/API-TO-SCREEN.md`, `docs/design-system.md`, `docs/REDESIGN-VERIFICATION.md`: frontend ↔ backend map, design tokens, and verification results.
 - `shared/contracts.ts`: Zod request/AI schemas and shared DTO types.
 - `server/app.ts`: HTTP routes, sessions, CSRF, authorization, errors.
 - `server/service.ts`: transactional case/appeal/policy workflows.
