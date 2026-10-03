@@ -1,7 +1,8 @@
 import type { Database } from "./db.js";
 import { one } from "./db.js";
 import { uid, audit } from "./service.js";
-import { analyze } from "./ai.js";
+import { analyze, type ResolvedCredential } from "./ai.js";
+import { resolveCredential } from "./credentials.js";
 import type { Policy } from "../shared/contracts.js";
 export async function runOne(
   db: Database,
@@ -21,6 +22,9 @@ export async function runOne(
       appeal_id: string | null;
       version_id: string;
       policy_id: string;
+      user_id: string | null;
+      credential_id: string | null;
+      credential_version: number | null;
     }>(
       q,
       "SELECT * FROM jobs WHERE status='QUEUED' OR (status='RUNNING' AND lease_until<now() AND attempts<3) ORDER BY created_at,id LIMIT 1",
@@ -65,6 +69,18 @@ export async function runOne(
           job.appeal_id,
         ])
       : undefined;
+    // User-funded job: resolve + decrypt the owner's credential at execution,
+    // verifying it is still active and owned. Any failure fails the job — there
+    // is NO fallback to the server env provider or fixture mode.
+    let credential: ResolvedCredential | undefined;
+    if (job.credential_id) {
+      credential = await resolveCredential(
+        db,
+        job.credential_id,
+        job.credential_version!,
+        job.user_id!,
+      );
+    }
     const output = await analyze(
       policy,
       {
@@ -75,6 +91,7 @@ export async function runOne(
         appeal: appeal as { reason: string; evidence: string } | undefined,
       },
       mode,
+      credential,
     );
     await db.tx(async (q) => {
       const j = await one(q, "SELECT * FROM jobs WHERE id=$1", [job.id]);
@@ -106,8 +123,12 @@ export async function runOne(
           job.version_id,
           job.policy_id,
           JSON.stringify(output),
-          mode,
-          mode === "fixture" ? "deterministic-fixture" : process.env.AI_MODEL,
+          credential ? "live" : mode,
+          credential
+            ? `${credential.provider}:${credential.model}`
+            : mode === "fixture"
+              ? "deterministic-fixture"
+              : process.env.AI_MODEL,
         ],
       );
       await q.query(

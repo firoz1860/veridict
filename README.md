@@ -12,7 +12,9 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Edit `.env`: set `SEED_PASSWORD` to a strong password of at least 12 characters. Set `AI_MODE=fixture` for an explicitly labeled deterministic demonstration, or `AI_MODE=live` with your `AI_API_KEY` and a JSON-mode-compatible `AI_MODEL` for real AI review.
+Edit `.env`: set `SEED_PASSWORD` to a strong password of at least 12 characters. Set `AI_MODE=fixture` for an explicitly labeled deterministic demonstration, or `AI_MODE=live` with your `AI_API_KEY` and a JSON-mode-compatible `AI_MODEL` for real AI review (this is the server-funded provider used for automatic analysis).
+
+For the Bring-Your-Own-Key (BYOK) feature, set `AI_ENCRYPTION_KEY` to the base64 encoding of 32 random bytes (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`); the API and the worker must share the same value or saved keys cannot be decrypted. Set `AI_CUSTOM_ALLOWED_HOSTS` to a comma-separated allowlist of HTTPS hosts permitted for Custom OpenAI-compatible providers (leave empty to disallow custom endpoints). Signed-in users connect their own provider key from the "Connect your AI provider" setup modal or the `/settings` → AI connection screen; keys are verified, encrypted at rest (AES-256-GCM), and used only for AI work the user explicitly requests.
 
 ```bash
 npm run db:migrate
@@ -42,9 +44,14 @@ Share demonstration credentials privately. There is no public account registrati
 
 Full steps are in [DEPLOYMENT.md](DEPLOYMENT.md). Render runs the API, durable worker, and PostgreSQL. Vercel serves the frontend and proxies `/api` to Render so sessions stay same-origin. The ZIP does not contain credentials or a deployment.
 
+## Public introduction
+
+A public product introduction lives at `/about` (no login required). The sign-in screen at `/` links to it, and its primary CTA leads back to sign-in. The authenticated dashboard stays at `/`.
+
 ## Project layout
 
-- `web/`: React UI, responsive styling, typed API client.
+- `web/`: React UI, responsive styling, typed API client. Editorial design system in `web/styles.css`; public page in `web/pages/public/About.tsx` (lazy-loaded).
+- `docs/API-TO-SCREEN.md`, `docs/design-system.md`, `docs/REDESIGN-VERIFICATION.md`: frontend ↔ backend map, design tokens, and verification results.
 - `shared/contracts.ts`: Zod request/AI schemas and shared DTO types.
 - `server/app.ts`: HTTP routes, sessions, CSRF, authorization, errors.
 - `server/service.ts`: transactional case/appeal/policy workflows.

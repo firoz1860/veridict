@@ -1,6 +1,9 @@
 import React, {
   useState,
   useEffect,
+  useRef,
+  lazy,
+  Suspense,
   createContext,
   useContext,
   type ReactNode,
@@ -16,6 +19,7 @@ import {
   Link,
   useParams,
   useSearchParams,
+  useLocation,
 } from "react-router-dom";
 import {
   ShieldCheck,
@@ -38,8 +42,21 @@ import {
   RefreshCw,
   MessageSquare,
   ArrowLeft,
+  Eye,
+  EyeOff,
+  Cpu,
+  UserCheck,
+  Settings,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { api, useData, clearSession, listApi } from "./api";
+import {
+  SetupGate,
+  AiConnectionSettings,
+  useConnection,
+  openSetup,
+} from "./AiConnection";
 import type {
   User,
   CaseRow,
@@ -52,6 +69,9 @@ import type {
   Analysis,
 } from "../shared/contracts";
 import "./styles.css";
+// Lazy so the expressive public page is a separate chunk and does not
+// inflate the authenticated workspace bundle.
+const About = lazy(() => import("./pages/public/About"));
 const Auth = createContext<{ user: User; logout: () => void }>(null!);
 const fmt = (s: string) =>
   new Date(s).toLocaleString(undefined, {
@@ -134,9 +154,91 @@ function Button({
     </button>
   );
 }
+function ConfirmDialog({
+  title,
+  danger,
+  confirmLabel,
+  busy,
+  onConfirm,
+  onCancel,
+  children,
+}: {
+  title: string;
+  danger?: boolean;
+  confirmLabel: string;
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  children?: ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      } else if (e.key === "Tab") {
+        const nodes = panelRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), [href], input, textarea, select, [tabindex]:not([tabindex="-1"])',
+        );
+        if (!nodes || !nodes.length) return;
+        const first = nodes[0],
+          last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      prevFocus?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div
+      className="dialog-backdrop"
+      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <div
+        className="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        tabIndex={-1}
+        ref={panelRef}
+      >
+        <h2 id="dialog-title">
+          {danger && <AlertTriangle size={20} />}
+          {title}
+        </h2>
+        {children}
+        <div className="dialog-actions">
+          <Button kind="secondary" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button kind={danger ? "danger" : ""} onClick={onConfirm} disabled={busy}>
+            {busy ? "Working…" : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
+    [show, setShow] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
@@ -171,6 +273,9 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
         <small>Built for clarity. Designed for trust.</small>
       </section>
       <section className="login-form">
+        <Link to="/about" className="login-top-link">
+          About Veridict <ArrowUpRight size={15} />
+        </Link>
         <div>
           <span className="eyebrow">YOUR REVIEW WORKSPACE</span>
           <h2>Welcome back.</h2>
@@ -206,14 +311,25 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             </label>
             <label>
               Password
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                placeholder="Enter your password"
-              />
+              <div className="password-field">
+                <input
+                  type={show ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  className="reveal"
+                  aria-label={show ? "Hide password" : "Show password"}
+                  aria-pressed={show}
+                  onClick={() => setShow(!show)}
+                >
+                  {show ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </label>
             <ErrorBox message={error} />
             <Button type="submit" disabled={busy}>
@@ -224,6 +340,9 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <div className="login-note">
             <ShieldCheck size={16} /> Access is limited to invited team members.
           </div>
+          <p className="login-about">
+            New here? <Link to="/about">Learn how Veridict works →</Link>
+          </p>
         </div>
       </section>
     </div>
@@ -231,6 +350,15 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
 }
 function Shell({ user, logout }: { user: User; logout: () => void }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("veridict.sidebar.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const location = useLocation();
+  const { conn } = useConnection();
   const staff = user.role !== "AUTHOR";
   const links = staff
     ? ([
@@ -247,39 +375,120 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
         ["/appeals", "My appeals", Scale],
         ["/policies", "Policies", BookOpen],
       ] as const);
+  // Index of the active nav item — drives the sliding indicator.
+  const activeIndex = links.findIndex(([to]) =>
+    to === "/"
+      ? location.pathname === "/"
+      : location.pathname === to || location.pathname.startsWith(to + "/"),
+  );
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("veridict.sidebar.collapsed", next ? "1" : "0");
+      } catch {
+        /* per-viewer convenience only */
+      }
+      return next;
+    });
+  }
   return (
     <Auth.Provider value={{ user, logout }}>
-      <div className="app-shell">
-        <aside className={open ? "sidebar open" : "sidebar"}>
-          <Link to="/" className="brand">
+      <a href="#main" className="skip-link">
+        Skip to content
+      </a>
+      <SetupGate />
+      <div className={"app-shell" + (collapsed ? " collapsed" : "")}>
+        <div
+          className={open ? "sidebar-scrim show" : "sidebar-scrim"}
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+        <aside id="app-sidebar" className={open ? "sidebar open" : "sidebar"}>
+          <Link to="/" className="brand" title="Veridict">
             <ShieldCheck />
-            Veridict<span>®</span>
+            <span className="brand-text">
+              Veridict<span>®</span>
+            </span>
           </Link>
           <div className="workspace-label">
             <span className="workspace-icon">V</span>
-            <div>
+            <div className="nav-text">
               Community workspace<small>Trust & safety team</small>
             </div>
           </div>
-          <div className="nav-label">WORKSPACE</div>
-          <nav>
-            {links.map(([to, label, Icon]) => (
-              <NavLink key={to} to={to} end onClick={() => setOpen(false)}>
+          <div className="nav-label nav-text">WORKSPACE</div>
+          <nav style={{ ["--active-index" as any]: activeIndex }}>
+            <span
+              className={"nav-indicator" + (activeIndex < 0 ? " hidden" : "")}
+              aria-hidden="true"
+            />
+            {links.map(([to, label, Icon], i) => (
+              <NavLink
+                key={to}
+                to={to}
+                end
+                title={label}
+                onClick={() => setOpen(false)}
+                style={{ animationDelay: `${i * 45}ms` }}
+              >
                 <Icon size={18} />
-                {label}
+                <span className="nav-text">{label}</span>
               </NavLink>
             ))}
           </nav>
           <div className="sidebar-bottom">
             <div className="human-note">
               <ShieldCheck size={18} />
-              <p>
+              <p className="nav-text">
                 AI advises.
                 <br />
                 <strong>You decide.</strong>
               </p>
             </div>
-            <button className="user-account" onClick={logout}>
+            <div className="ai-connection-nav">
+              {conn === null && (
+                <button
+                  type="button"
+                  className="ai-connect-cta"
+                  onClick={openSetup}
+                  title="Connect AI provider"
+                >
+                  <Cpu size={17} />
+                  <span className="nav-text">Connect AI provider</span>
+                </button>
+              )}
+              <NavLink
+                to="/settings"
+                className="ai-settings-link"
+                title="AI connection"
+                onClick={() => setOpen(false)}
+              >
+                <Settings size={17} />
+                <span className="nav-text">
+                  AI connection
+                  {conn ? (
+                    <small className="ai-dot connected" aria-label="connected" />
+                  ) : null}
+                </span>
+              </NavLink>
+            </div>
+            <button
+              type="button"
+              className="collapse-toggle"
+              onClick={toggleCollapsed}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={17} />
+              ) : (
+                <PanelLeftClose size={17} />
+              )}
+              <span className="nav-text">Collapse</span>
+            </button>
+            <button className="user-account" onClick={logout} title="Sign out">
               <span className="avatar">
                 {user.name
                   .split(" ")
@@ -287,7 +496,7 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
                   .slice(0, 2)
                   .join("")}
               </span>
-              <span>
+              <span className="nav-text">
                 {user.name}
                 <small>{human(user.role)}</small>
               </span>
@@ -300,6 +509,8 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
             <button
               className="icon-button mobile-menu"
               aria-label="Toggle navigation"
+              aria-expanded={open}
+              aria-controls="app-sidebar"
               onClick={() => setOpen(!open)}
             >
               <Menu />
@@ -309,12 +520,21 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
               <strong>{staff ? "Moderation console" : "Author portal"}</strong>
             </div>
             <span className="topbar-right">
-              <span className="dot" /> Human-reviewed decisions{" "}
+              <span className="dot" />{" "}
+              <span className="label-text">Human-reviewed decisions</span>{" "}
               <span className="avatar small">{user.name[0]}</span>
             </span>
           </header>
-          <main>
+          <main id="main">
             <Routes>
+              <Route
+                path="/about"
+                element={
+                  <Suspense fallback={<Loading />}>
+                    <About user={user} />
+                  </Suspense>
+                }
+              />
               <Route
                 path="/"
                 element={
@@ -334,6 +554,7 @@ function Shell({ user, logout }: { user: User; logout: () => void }) {
               <Route path="/content" element={<Content mine />} />
               <Route path="/community" element={<Content mine={false} />} />
               <Route path="/content/:id" element={<ContentDetail />} />
+              <Route path="/settings" element={<AiConnectionSettings />} />
               <Route
                 path="*"
                 element={<Empty text="This page does not exist." />}
@@ -619,16 +840,34 @@ function Findings({
         </div>
       ) : (
         analysis.output.findings.map((f, i) => (
-          <article className="finding" key={i}>
+          <article
+            className={
+              "finding " +
+              (f.source === "DETERMINISTIC" ? "src-deterministic" : "src-ai")
+            }
+            key={i}
+          >
             <div className="finding-top">
               <strong>{f.clauseKey}</strong>
               <Badge value={f.severity} />
             </div>
             <div className="finding-meta">
-              {f.source === "DETERMINISTIC"
-                ? "Deterministic check"
-                : "AI interpretation"}{" "}
-              · {human(f.certainty)}
+              <span
+                className={
+                  "source-tag " + (f.source === "DETERMINISTIC" ? "det" : "ai")
+                }
+              >
+                {f.source === "DETERMINISTIC" ? (
+                  <>
+                    <Check size={11} /> Deterministic check
+                  </>
+                ) : (
+                  <>
+                    <Cpu size={11} /> AI interpretation
+                  </>
+                )}
+              </span>
+              · {f.certainty === "SUPPORTED" ? "Supported evidence" : "Uncertain interpretation"}
             </div>
             <blockquote>{f.policyQuote}</blockquote>
             <button
@@ -660,6 +899,7 @@ function CasePage() {
     [rationale, setRationale] = useState(""),
     [keys, setKeys] = useState<string[]>([]),
     [manual, setManual] = useState(false),
+    [confirmRemove, setConfirmRemove] = useState(false),
     [busy, setBusy] = useState(false),
     [failure, setFailure] = useState("");
   async function act(path: string, body: unknown) {
@@ -677,6 +917,15 @@ function CasePage() {
   }
   if (!c) return error ? <ErrorBox message={error} /> : <Loading />;
   const selected = range && range[1] <= c.text.length ? range : null;
+  const recordDecision = () =>
+    act(`/cases/${id}/decisions`, {
+      expectedRevision: c.revision,
+      action,
+      disposition,
+      rationale,
+      clauseKeys: keys,
+      manualReview: manual,
+    });
   return (
     <>
       <Link className="back-link" to="/queue">
@@ -819,21 +1068,11 @@ function CasePage() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      if (
-                        action === "REMOVE" &&
-                        !window.confirm(
-                          "Remove this content from the community feed? The author can appeal.",
-                        )
-                      )
+                      if (action === "REMOVE") {
+                        setConfirmRemove(true);
                         return;
-                      act(`/cases/${id}/decisions`, {
-                        expectedRevision: c.revision,
-                        action,
-                        disposition,
-                        rationale,
-                        clauseKeys: keys,
-                        manualReview: manual,
-                      });
+                      }
+                      recordDecision();
                     }}
                   >
                     <label>
@@ -968,6 +1207,28 @@ function CasePage() {
           </div>
         </section>
       </div>
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove this content?"
+          danger
+          confirmLabel="Remove content"
+          busy={busy}
+          onCancel={() => setConfirmRemove(false)}
+          onConfirm={() => {
+            setConfirmRemove(false);
+            recordDecision();
+          }}
+        >
+          <p>
+            This removes the content from the community feed. It will show in the
+            author’s history and they can appeal once.
+          </p>
+          <div className="dialog-ref">
+            {human(c.type)} · {c.author_name} — “{c.text.slice(0, 120)}
+            {c.text.length > 120 ? "…" : ""}”
+          </div>
+        </ConfirmDialog>
+      )}
     </>
   );
 }
@@ -1046,6 +1307,7 @@ function AppealPage() {
     [rationale, setRationale] = useState(""),
     [basis, setBasis] = useState("current"),
     [manual, setManual] = useState(false),
+    [confirmResolve, setConfirmResolve] = useState(false),
     [busy, setBusy] = useState(false),
     [failure, setFailure] = useState("");
   async function submit(path: string, b: unknown) {
@@ -1062,6 +1324,21 @@ function AppealPage() {
     }
   }
   if (!a) return error ? <ErrorBox message={error} /> : <Loading />;
+  const finalAction =
+    outcome === "UPHELD"
+      ? a.original.action
+      : outcome === "OVERTURNED"
+        ? "ALLOW"
+        : action;
+  const resolveAppeal = () =>
+    submit(`/appeals/${id}/resolve`, {
+      expectedRevision: a.revision,
+      outcome,
+      action: finalAction,
+      rationale,
+      policyId: basis === "current" ? a.currentPolicy.id : a.originalPolicy.id,
+      manualReview: manual,
+    });
   return (
     <>
       <Link className="back-link" to="/appeals">
@@ -1166,24 +1443,7 @@ function AppealPage() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!window.confirm("Record this final appeal outcome?"))
-                      return;
-                    submit(`/appeals/${id}/resolve`, {
-                      expectedRevision: a.revision,
-                      outcome,
-                      action:
-                        outcome === "UPHELD"
-                          ? a.original.action
-                          : outcome === "OVERTURNED"
-                            ? "ALLOW"
-                            : action,
-                      rationale,
-                      policyId:
-                        basis === "current"
-                          ? a.currentPolicy.id
-                          : a.originalPolicy.id,
-                      manualReview: manual,
-                    });
+                    setConfirmResolve(true);
                   }}
                 >
                   <div className="form-row">
@@ -1270,6 +1530,31 @@ function AppealPage() {
           )}
         </div>
       </section>
+      {confirmResolve && (
+        <ConfirmDialog
+          title="Record this appeal outcome?"
+          danger={finalAction === "REMOVE"}
+          confirmLabel="Record outcome"
+          busy={busy}
+          onCancel={() => setConfirmResolve(false)}
+          onConfirm={() => {
+            setConfirmResolve(false);
+            resolveAppeal();
+          }}
+        >
+          <p>
+            This is the final, recorded outcome of the appeal and sets the content’s
+            visibility accordingly. It cannot be edited afterward.
+          </p>
+          <div className="dialog-ref">
+            Outcome: <strong>{outcome}</strong> · Resulting action:{" "}
+            <strong>{finalAction}</strong> · Policy basis{" "}
+            {basis === "current"
+              ? "v" + a.currentPolicy.version
+              : "v" + a.originalPolicy.version}
+          </div>
+        </ConfirmDialog>
+      )}
     </>
   );
 }
@@ -1577,6 +1862,7 @@ function Policies() {
     [clauses, setClauses] = useState<Policy["clauses"]>([]),
     [draftId, setDraftId] = useState(""),
     [draftRevision, setDraftRevision] = useState(1),
+    [confirmPublish, setConfirmPublish] = useState(false),
     [failure, setFailure] = useState(""),
     [busy, setBusy] = useState(false);
   const p = data?.find((p) => p.id === selected) || data?.[0];
@@ -1589,22 +1875,46 @@ function Policies() {
     setDraftId(d?.revision ? d.id : "");
     setDraftRevision(d?.revision || 1);
   }
+  async function persist() {
+    const result = await api<{ id: string; revision: number }>(
+      draftId ? "/policies/drafts/" + draftId : "/policies/drafts",
+      {
+        title,
+        clauses,
+        ...(draftId ? { expectedRevision: draftRevision } : {}),
+      },
+      draftId ? "PATCH" : "POST",
+    );
+    setDraftId(result.id);
+    setDraftRevision(result.revision);
+    drafts.reload();
+    return result;
+  }
   async function save() {
     setBusy(true);
     try {
-      const result = await api<{ id: string; revision: number }>(
-        draftId ? "/policies/drafts/" + draftId : "/policies/drafts",
-        {
-          title,
-          clauses,
-          ...(draftId ? { expectedRevision: draftRevision } : {}),
-        },
-        draftId ? "PATCH" : "POST",
-      );
-      setDraftId(result.id);
-      setDraftRevision(result.revision);
-      drafts.reload();
+      await persist();
       setFailure("");
+    } catch (e) {
+      setFailure((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function publish() {
+    setBusy(true);
+    try {
+      // Save the current edits first so publication never discards them,
+      // then publish against the revision the server just confirmed.
+      const saved = await persist();
+      await api(`/policies/drafts/${saved.id}/publish`, {
+        expectedRevision: saved.revision,
+      });
+      setEditor(false);
+      setDraftId("");
+      setFailure("");
+      reload();
+      drafts.reload();
     } catch (e) {
       setFailure((e as Error).message);
     } finally {
@@ -1791,35 +2101,36 @@ function Policies() {
                 <Button
                   kind="secondary"
                   disabled={busy}
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        "Publish the saved draft? Unresolved cases and open appeals will be re-evaluated. Save edits first.",
-                      )
-                    )
-                      return;
-                    setBusy(true);
-                    try {
-                      await api(`/policies/drafts/${draftId}/publish`, {
-                        expectedRevision: draftRevision,
-                      });
-                      setEditor(false);
-                      setDraftId("");
-                      reload();
-                      drafts.reload();
-                    } catch (e) {
-                      setFailure((e as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
+                  onClick={() => setConfirmPublish(true)}
                 >
-                  Publish saved draft
+                  Save &amp; publish
                 </Button>
               )}
             </div>
           </div>
         </section>
+      )}
+      {confirmPublish && (
+        <ConfirmDialog
+          title="Save and publish this policy?"
+          confirmLabel="Publish new version"
+          busy={busy}
+          onCancel={() => setConfirmPublish(false)}
+          onConfirm={() => {
+            setConfirmPublish(false);
+            publish();
+          }}
+        >
+          <p>
+            Your current edits are saved first, then published as a new immutable
+            version. Unresolved cases and open appeals are scheduled for
+            re-evaluation against it. Decisions already made keep their original
+            policy version.
+          </p>
+          <div className="dialog-ref">
+            “{title}” · {clauses.length} clause{clauses.length === 1 ? "" : "s"}
+          </div>
+        </ConfirmDialog>
       )}
     </>
   );
@@ -1922,7 +2233,7 @@ function Status() {
                 {data.aiMode === "fixture"
                   ? "Deterministic demonstration; not live AI"
                   : data.aiConfigured
-                    ? "Provider configured"
+                    ? "Provider configured — not a verified live request"
                     : "Provider credentials missing"}
               </small>
             </div>
@@ -1986,15 +2297,29 @@ function App() {
     }
   }
   if (!ready) return <Loading />;
-  return user ? (
-    <Shell user={user} logout={logout} />
-  ) : (
-    <Login
-      onLogin={(u) => {
-        setUser(u);
-        window.history.replaceState(null, "", "/");
-      }}
-    />
+  if (user) return <Shell user={user} logout={logout} />;
+  return (
+    <Routes>
+      <Route
+        path="/about"
+        element={
+          <Suspense fallback={<Loading />}>
+            <About user={null} />
+          </Suspense>
+        }
+      />
+      <Route
+        path="*"
+        element={
+          <Login
+            onLogin={(u) => {
+              setUser(u);
+              window.history.replaceState(null, "", "/");
+            }}
+          />
+        }
+      />
+    </Routes>
   );
 }
 createRoot(document.getElementById("root")!).render(

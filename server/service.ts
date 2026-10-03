@@ -34,10 +34,18 @@ export async function activePolicy(q: SQL) {
   ensure(p, 503, "NO_POLICY", "An administrator must publish a policy");
   return p;
 }
+// A user-funded job carries references (never the secret itself) so the worker
+// can resolve + decrypt the owner's credential at execution time.
+export type JobCredential = {
+  userId: string;
+  credentialId: string;
+  credentialVersion: number;
+};
 export async function enqueue(
   q: SQL,
   c: Record<string, any>,
   appealId: string | null = null,
+  cred: JobCredential | null = null,
 ) {
   await q.query(
     "UPDATE jobs SET status='SUPERSEDED' WHERE status IN ('QUEUED','RUNNING') AND ((case_id=$1 AND appeal_id IS NULL) OR ($2::uuid IS NOT NULL AND appeal_id=$2))",
@@ -45,8 +53,17 @@ export async function enqueue(
   );
   const id = uid();
   await q.query(
-    "INSERT INTO jobs(id,case_id,appeal_id,version_id,policy_id) VALUES($1,$2,$3,$4,$5)",
-    [id, c.id, appealId, c.version_id, c.policy_id],
+    "INSERT INTO jobs(id,case_id,appeal_id,version_id,policy_id,user_id,credential_id,credential_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+    [
+      id,
+      c.id,
+      appealId,
+      c.version_id,
+      c.policy_id,
+      cred?.userId ?? null,
+      cred?.credentialId ?? null,
+      cred?.credentialVersion ?? null,
+    ],
   );
   return id;
 }

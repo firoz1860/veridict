@@ -75,6 +75,56 @@ export const ResolutionInput = Revision.extend({
   policyId: z.string().uuid(),
   manualReview: z.boolean().default(false),
 });
+export const AiProvider = z.enum([
+  "openai",
+  "anthropic",
+  "xai",
+  "gemini",
+  "openrouter",
+  "custom",
+]);
+export type AiProvider = z.infer<typeof AiProvider>;
+const ApiKey = z.string().trim().min(8).max(400);
+const ModelId = z.string().trim().min(1).max(200);
+const BaseUrl = z.string().trim().url().max(500);
+export const AiVerifyInput = z.object({
+  provider: AiProvider,
+  apiKey: ApiKey,
+  model: ModelId.optional(),
+  baseUrl: BaseUrl.optional(),
+});
+export const AiConnectInput = z.object({
+  provider: AiProvider,
+  apiKey: ApiKey,
+  model: ModelId,
+  baseUrl: BaseUrl.optional(),
+});
+export const AiModelsQuery = z.object({
+  provider: AiProvider.optional(),
+  apiKey: ApiKey.optional(),
+  baseUrl: BaseUrl.optional(),
+});
+export const AiModelPatch = z.object({ model: ModelId });
+export type ProviderMetaDTO = {
+  id: AiProvider;
+  label: string;
+  keyUrl: string;
+  docsUrl: string;
+  capabilities: string;
+  supportsModelList: boolean;
+  requiresBaseUrl: boolean;
+};
+export type ConnectionDTO = {
+  id: string;
+  provider: AiProvider;
+  model: string;
+  baseUrl: string | null;
+  keySuffix: string;
+  status: string;
+  verifiedAt: string | null;
+  version: number;
+  createdAt: string;
+};
 export type Analysis = {
   id: string;
   output: AnalysisOutput;
