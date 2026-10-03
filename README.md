@@ -38,6 +38,14 @@ The seed command creates these accounts with your `SEED_PASSWORD`. Existing acco
 | reviewer2@veridict.local  | Second appeal reviewer      |
 | admin@veridict.local      | Policy administrator        |
 
+
+  Log in at http://localhost:5173 with any seeded account, password Veridict_gJiSi6JEGzeL:
+  - admin@veridict.local (policies + drafts)
+  - moderator@veridict.local (queue, case review, re-run analysis)
+  - reviewer@veridict.local (appeals)
+  - author@veridict.local (create content, appeal)
+  
+
 Share demonstration credentials privately. There is no public account registration. Use separate browser profiles for different roles, or log out before switching.
 
 ## Deploy yourself: Render + Vercel
