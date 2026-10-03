@@ -9,3 +9,8 @@ playwright-report/
 *.log
 *.zip
 /private-prompts/
+# Local-only operator files (kept out of the public repo)
+/.claude/
+/CLAUDE.md
+/DEPLOYMENT.md
+/VERIFICATION.md
