@@ -27,3 +27,7 @@ CREATE INDEX IF NOT EXISTS analyses_appeal_idx ON analyses(appeal_id,created_at)
 CREATE INDEX IF NOT EXISTS content_owner_idx ON contents(author_id);
 CREATE INDEX IF NOT EXISTS audit_time_idx ON audit(created_at,id);
 CREATE INDEX IF NOT EXISTS ai_credentials_user_idx ON ai_credentials(user_id,active);
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS requested_model text;
+UPDATE jobs j SET requested_model=c.model FROM ai_credentials c WHERE j.credential_id=c.id AND j.requested_model IS NULL;
+ALTER TABLE resolutions ADD COLUMN IF NOT EXISTS visibility_applied boolean NOT NULL DEFAULT true;

@@ -40,6 +40,7 @@ export type JobCredential = {
   userId: string;
   credentialId: string;
   credentialVersion: number;
+  model: string;
 };
 export async function enqueue(
   q: SQL,
@@ -53,7 +54,7 @@ export async function enqueue(
   );
   const id = uid();
   await q.query(
-    "INSERT INTO jobs(id,case_id,appeal_id,version_id,policy_id,user_id,credential_id,credential_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+    "INSERT INTO jobs(id,case_id,appeal_id,version_id,policy_id,user_id,credential_id,credential_version,requested_model) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
     [
       id,
       c.id,
@@ -63,6 +64,7 @@ export async function enqueue(
       cred?.userId ?? null,
       cred?.credentialId ?? null,
       cred?.credentialVersion ?? null,
+      cred?.model ?? null,
     ],
   );
   return id;
@@ -223,6 +225,12 @@ export async function appealDetail(q: SQL, id: string, user: User) {
         "SELECT * FROM analyses WHERE appeal_id=$1 AND policy_id=$2 ORDER BY created_at DESC LIMIT 1",
         [id, a.policy_id],
       )) || null,
+    analysisJob:
+      (await one(
+        q,
+        "SELECT status,error FROM jobs WHERE appeal_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1",
+        [id],
+      )) || null,
     resolution:
       (await one(q, "SELECT * FROM resolutions WHERE appeal_id=$1", [id])) ||
       null,
@@ -232,7 +240,7 @@ export async function appealDetail(q: SQL, id: string, user: User) {
         : !a.assignee
           ? ["CLAIM"]
           : a.assignee === user.id
-            ? ["RESOLVE"]
+            ? ["RESOLVE", "ANALYZE"]
             : [],
   };
 }
@@ -429,7 +437,8 @@ export async function resolveAppeal(q: SQL, id: string, user: User, b: any) {
     "Policy changed",
   );
   ensure(
-    b.manualReview || a.analysis,
+    b.manualReview ||
+      (a.analysis && (!a.analysisJob || a.analysisJob.status === "SUCCEEDED")),
     409,
     "ANALYSIS_REQUIRED",
     "Wait for current analysis or explicitly review manually",
@@ -437,12 +446,12 @@ export async function resolveAppeal(q: SQL, id: string, user: User, b: any) {
   const action = resolveAction(b.outcome, a.action, b.action);
   const newer = await one(
     q,
-    "SELECT c.id FROM cases c JOIN cases original ON original.id=$1 WHERE c.content_id=original.content_id AND c.id<>original.id AND c.created_at>original.created_at",
+    "SELECT c.id FROM cases c JOIN cases original ON original.id=$1 WHERE c.content_id=original.content_id AND c.id<>original.id AND c.created_at>=original.created_at",
     [a.case_id],
   );
-  ensure(!newer, 409, "NEWER_CONTENT", "A newer content review exists");
+  const visibilityApplied = !newer;
   await q.query(
-    "INSERT INTO resolutions(id,appeal_id,actor_id,outcome,action,rationale,policy_id,manual) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+    "INSERT INTO resolutions(id,appeal_id,actor_id,outcome,action,rationale,policy_id,manual,visibility_applied) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
     [
       uid(),
       id,
@@ -452,6 +461,7 @@ export async function resolveAppeal(q: SQL, id: string, user: User, b: any) {
       b.rationale,
       b.policyId,
       b.manualReview,
+      visibilityApplied,
     ],
   );
   await q.query(
@@ -462,16 +472,18 @@ export async function resolveAppeal(q: SQL, id: string, user: User, b: any) {
     "UPDATE jobs SET status='SUPERSEDED' WHERE appeal_id=$1 AND status IN ('QUEUED','RUNNING')",
     [id],
   );
-  await q.query(
-    "UPDATE contents SET visibility=$2 WHERE id=(SELECT content_id FROM cases WHERE id=$1)",
-    [a.case_id, action === "REMOVE" ? "REMOVED" : "VISIBLE"],
-  );
+  if (visibilityApplied)
+    await q.query(
+      "UPDATE contents SET visibility=$2 WHERE id=(SELECT content_id FROM cases WHERE id=$1)",
+      [a.case_id, action === "REMOVE" ? "REMOVED" : "VISIBLE"],
+    );
   await audit(q, user.id, "APPEAL_RESOLVED", id, {
     outcome: b.outcome,
+    visibilityApplied,
     action,
     policyId: b.policyId,
     rationale: b.rationale,
     manual: b.manualReview,
   });
-  return { id, outcome: b.outcome, action };
+  return { id, outcome: b.outcome, action, visibilityApplied };
 }

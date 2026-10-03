@@ -40,6 +40,9 @@ test("connected moderation, independent appeal and restoration", async ({
     })
     .click();
   await expect(m).toHaveURL(/\/cases\//);
+  await expect(
+    m.getByRole("heading", { name: "Review with context." }),
+  ).toBeVisible();
   await expect(m.getByText("ready for review", { exact: true })).toBeVisible({
     timeout: 20000,
   });
@@ -71,6 +74,29 @@ test("connected moderation, independent appeal and restoration", async ({
     })
     .click();
   await r.getByRole("button", { name: "Claim independent review" }).click();
+  const retry = r.getByRole("button", { name: "Re-run appeal analysis" });
+  await expect(retry).toBeEnabled({ timeout: 20000 });
+  const retried = r.waitForResponse(
+    (res) =>
+      res.url().includes("/appeals/") &&
+      res.url().endsWith("/analyze") &&
+      res.request().method() === "POST",
+  );
+  await retry.click();
+  expect((await retried).status()).toBe(202);
+  const appealPath = new URL(r.url()).pathname;
+  await expect
+    .poll(
+      async () => {
+        const response = await r.request.get("/api/v1" + appealPath);
+        return (await response.json()).data.analysisJob.status;
+      },
+      { timeout: 20000 },
+    )
+    .toBe("SUCCEEDED");
+  await r.reload();
+  await expect(retry).toBeEnabled();
+
   await r
     .getByRole("combobox", { name: /^Outcome/ })
     .selectOption("OVERTURNED");
@@ -110,7 +136,9 @@ test("public about page introduces the product and routes to sign-in", async ({
     .getByRole("link", { name: "Open review workspace", exact: true })
     .first()
     .click();
-  await expect(page.getByRole("button", { name: "Sign in to workspace" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in to workspace" }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });
 test("dashboard and mobile layout render without overflow", async ({
