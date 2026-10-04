@@ -156,7 +156,7 @@ const FAQ = [
   },
   {
     q: "Which content formats are supported?",
-    a: "Text only — posts and comments in a single controlled community. There are no file attachments, no email, and no public account registration. Demonstration accounts are invited privately.",
+    a: "Text only — posts and comments in a single controlled community. There are no file attachments, no email, and author registration is available. Staff accounts are provisioned privately.",
   },
 ];
 
@@ -880,8 +880,8 @@ export default function About({ user }: { user: User | null }) {
             </span>
             <h2>Judgment, with the evidence in hand.</h2>
             <p>
-              Sign in to the review workspace. Access is limited to invited team
-              members — there is no public registration.
+              Sign in to the review workspace. Author registration is open;
+              staff accounts are provisioned privately.
             </p>
             <Link
               className="button"
@@ -918,7 +918,7 @@ export default function About({ user }: { user: User | null }) {
           <div className="footer-col">
             <h4>Access</h4>
             <Link to="/">{user ? workspaceLabel : "Sign in"}</Link>
-            <span>Invite-only accounts</span>
+            <span>Author signup & demo</span>
             <span>Text posts &amp; comments</span>
           </div>
         </div>

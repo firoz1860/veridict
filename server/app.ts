@@ -14,6 +14,8 @@ import {
   checkPassword,
   throttle,
   passwordHash,
+  registerAuthor,
+  token,
 } from "./auth.js";
 import {
   Login,
@@ -223,6 +225,57 @@ export function createApp(db: Database, config: Config) {
       });
     }),
   );
+  for (const mode of ["signup", "demo"] as const) {
+    app.post(
+      `/api/v1/auth/${mode}`,
+      write,
+      wrap(async (r, s) => {
+        ensure(
+          !r.user,
+          409,
+          "ALREADY_SIGNED_IN",
+          "Sign out before creating another session",
+        );
+        ensure(
+          await throttle(db, "registration:" + r.ip, 5, 3600),
+          429,
+          "RATE_LIMIT",
+          "Too many new sessions. Try again later.",
+        );
+        ensure(
+          await throttle(db, "registration:global", 100, 3600),
+          429,
+          "RATE_LIMIT",
+          "New account access is temporarily busy. Try again later.",
+        );
+        const result = await db.tx(async (q) => {
+          const user = await registerAuthor(
+            q,
+            mode === "demo"
+              ? {
+                  name: "Demo Author",
+                  email: `demo-${uid()}@example.invalid`,
+                  password: token(),
+                }
+              : r.body,
+          );
+          await q.query("DELETE FROM sessions WHERE token=$1", [
+            r.session.token,
+          ]);
+          const session = await newSession(q, user.id);
+          await audit(
+            q,
+            user.id,
+            mode === "demo" ? "DEMO_SESSION_CREATED" : "AUTHOR_REGISTERED",
+            user.id,
+          );
+          return { user, session };
+        });
+        sessionCookie(s, result.session.raw);
+        return send(s, { user: result.user, csrf: result.session.csrf }, 201);
+      }),
+    );
+  }
   app.use("/api/v1", logged);
   app.get(
     "/api/v1/auth/me",

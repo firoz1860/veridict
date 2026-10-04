@@ -240,6 +240,21 @@ function ConfirmDialog({
   );
 }
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
+  const [signup, setSignup] = useState(false),
+    [name, setName] = useState("");
+  async function demo() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api<{ user: User }>("/auth/demo", {});
+      onLogin(r.user);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [show, setShow] = useState(false),
@@ -282,18 +297,26 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
         </Link>
         <div>
           <span className="eyebrow">YOUR REVIEW WORKSPACE</span>
-          <h2>Welcome back.</h2>
-          <p>Sign in to make your next decision count.</p>
+          <h2>{signup ? "Create your author account." : "Welcome back."}</h2>
+          <p>
+            {signup
+              ? "Publish content and follow its review history."
+              : "Sign in to make your next decision count."}
+          </p>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);
               setError("");
               try {
-                const r = await api<{ user: User }>("/auth/login", {
-                  email,
-                  password,
-                });
+                const r = await api<{ user: User }>(
+                  signup ? "/auth/signup" : "/auth/login",
+                  {
+                    ...(signup ? { name } : {}),
+                    email,
+                    password,
+                  },
+                );
                 onLogin(r.user);
               } catch (e) {
                 setError((e as Error).message);
@@ -302,6 +325,19 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
               }
             }}
           >
+            {signup && (
+              <label>
+                Display name
+                <input
+                  required
+                  minLength={2}
+                  maxLength={80}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                />
+              </label>
+            )}
             <label>
               Email address
               <input
@@ -321,7 +357,8 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                  autoComplete={signup ? "new-password" : "current-password"}
+                  minLength={signup ? 12 : undefined}
                   placeholder="Enter your password"
                 />
                 <button
@@ -337,13 +374,42 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
             </label>
             <ErrorBox message={error} />
             <Button type="submit" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in to workspace"}
+              {busy
+                ? "Working…"
+                : signup
+                  ? "Create author account"
+                  : "Sign in to workspace"}
               <ArrowUpRight size={18} />
             </Button>
           </form>
           <div className="login-note">
-            <ShieldCheck size={16} /> Access is limited to invited team members.
+            <ShieldCheck size={16} /> Author signup is open. Staff accounts are
+            provisioned privately.
           </div>
+          {signup && (
+            <p>
+              Use at least 12 characters. Email verification and password
+              recovery are not available yet.
+            </p>
+          )}
+          <Button
+            kind="secondary"
+            disabled={busy}
+            onClick={() => {
+              setSignup(!signup);
+              setError("");
+            }}
+          >
+            {signup ? "Back to sign in" : "Create an account"}
+          </Button>
+          <Button kind="secondary" disabled={busy} onClick={demo}>
+            Try author demo
+          </Button>
+          <p>
+            Demo opens a separate author session for up to 12 hours. It cannot
+            moderate or change policies. Label demo posts as test content; posts
+            enter the current community and are retained in its history.
+          </p>
           <p className="login-about">
             New here? <Link to="/about">Learn how Veridict works →</Link>
           </p>

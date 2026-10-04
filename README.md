@@ -95,10 +95,14 @@ API integration tests use PGlite (embedded PostgreSQL) with actual SQL and real 
 
 ## Deliberate boundaries
 
-Text only, one controlled community, invited demo accounts, no real social network, no automatic bans, no file attachments, no email. Content/appeal views show the latest 100 records; case and audit tables support pagination. Exact-match deterministic rules identify strings, not semantic intent. Context-sensitive interpretation is delegated to the configured model and ultimately a human. The source is deployment-ready but deployment and live provider validation require your own environment and keys.
+Text only, one controlled community, author signup, separate author demo sessions, privately provisioned staff accounts, no real social network, no automatic bans, no file attachments, no email. Content/appeal views show the latest 100 records; case and audit tables support pagination. Exact-match deterministic rules identify strings, not semantic intent. Context-sensitive interpretation is delegated to the configured model and ultimately a human. The source is deployment-ready but deployment and live provider validation require your own environment and keys.
 
 ## Review integrity
 
 Appeals against historical decisions can be resolved without changing visibility governed by a newer review. The outcome records whether it changed visibility. Assigned independent reviewers can explicitly re-run appeal analysis with their own connected key; automatic work continues to use the server configuration. Failed retries require another successful run or explicit manual review.
 
 Personal requests pin the selected model when queued. Later model changes apply to future requests. Revoking or replacing a key prevents queued work from using that credential. Model listing checks access, not moderation compatibility or available credit; live provider validation requires an explicit analysis request. No claim is made that every listed model is compatible.
+
+### Author access
+
+On the login page choose **Create an account** or **Try author demo**. New accounts always have the AUTHOR role. Staff accounts remain private. See [account access](docs/AUTH-ACCESS.md) for limitations, retention and rate limits.

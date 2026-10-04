@@ -218,3 +218,18 @@ export type Envelope<T> = {
   requestId: string;
   nextCursor?: string | null;
 };
+
+export const Signup = z.object({
+  name: z.string().trim().min(2).max(80),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email()
+    .max(200)
+    .refine(
+      (value) => !value.endsWith(".local"),
+      "Internal account addresses are reserved",
+    ),
+  password: z.string().min(12).max(200),
+});

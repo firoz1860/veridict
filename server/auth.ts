@@ -1,4 +1,12 @@
-import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
+import { Signup, type User } from "../shared/contracts.js";
+import { AppError } from "./domain.js";
+import {
+  randomBytes,
+  randomUUID,
+  scrypt,
+  timingSafeEqual,
+  createHash,
+} from "node:crypto";
 import { promisify } from "node:util";
 import type { SQL } from "./db.js";
 import { one } from "./db.js";
@@ -40,4 +48,21 @@ export async function throttle(
     [key, String(seconds)],
   );
   return r!.count <= max;
+}
+
+export async function registerAuthor(q: SQL, input: unknown) {
+  const b = Signup.parse(input);
+  const id = randomUUID();
+  const password = await passwordHash(b.password);
+  const result = await q.query<User>(
+    "INSERT INTO users(id,name,email,password,role) VALUES($1,$2,$3,$4,'AUTHOR') ON CONFLICT(email) DO NOTHING RETURNING id,name,email,role",
+    [id, b.name, b.email, password],
+  );
+  if (!result.rows[0])
+    throw new AppError(
+      409,
+      "ACCOUNT_EXISTS",
+      "An account is already registered. Sign in instead.",
+    );
+  return result.rows[0];
 }
