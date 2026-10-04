@@ -235,3 +235,52 @@ test("About paired entrances settle at the center without overflow", async ({
     animations: "disabled",
   });
 });
+
+test("author signup persists after refresh, signs out, and demo has no staff controls", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Create an account", exact: true })
+    .click();
+  await page
+    .getByLabel("Display name", { exact: true })
+    .fill("Browser New Author");
+  await page
+    .getByLabel("Email address", { exact: true })
+    .fill("browser-new@example.com");
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("browser-signup-password");
+  await page
+    .getByRole("button", { name: "Create author account", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Set up later", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Publish content", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Publish content", exact: true }),
+  ).toBeVisible();
+  await page.locator('button[title="Sign out"]').click();
+  await expect(
+    page.getByRole("button", { name: "Sign in to workspace", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Sign in to workspace", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Try author demo", exact: true })
+    .click();
+  // The setup dismissal is scoped to the browser session.
+  const later = page.getByRole("button", { name: "Set up later", exact: true });
+  if (await later.isVisible()) await later.click();
+  await expect(
+    page.getByRole("button", { name: "Publish content", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Moderation queue", exact: true }),
+  ).toHaveCount(0);
+});

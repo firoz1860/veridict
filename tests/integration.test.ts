@@ -501,3 +501,60 @@ test("historical appeal resolves without overriding a newer removal or blocking 
     200,
   );
 });
+
+test("public signup and demo rotate anonymous sessions and cannot acquire staff permissions", async () => {
+  for (const mode of ["signup", "demo"]) {
+    const a = request.agent(app);
+    const anonymous = await a.get("/api/v1/auth/csrf");
+    const body =
+      mode === "signup"
+        ? {
+            name: "New Member",
+            email: "member@example.com",
+            password: "signup-test-password",
+            role: "ADMIN",
+          }
+        : { role: "ADMIN" };
+    assert.equal((await a.post(`/api/v1/auth/${mode}`).send(body)).status, 403);
+    const r = await a
+      .post(`/api/v1/auth/${mode}`)
+      .set("Origin", "http://localhost:5173")
+      .set("X-CSRF-Token", anonymous.body.data.csrf)
+      .send(body);
+    assert.equal(r.status, 201);
+    assert.equal(r.body.data.user.role, "AUTHOR");
+    assert.notEqual(r.body.data.csrf, anonymous.body.data.csrf);
+    assert.equal(
+      (await a.get("/api/v1/auth/me")).body.data.id,
+      r.body.data.user.id,
+    );
+    assert.equal((await a.get("/api/v1/cases")).status, 403);
+    assert.equal(
+      (
+        await a
+          .post("/api/v1/auth/logout")
+          .set("Origin", "http://localhost:5173")
+          .set("X-CSRF-Token", r.body.data.csrf)
+          .send({})
+      ).status,
+      200,
+    );
+    assert.equal((await a.get("/api/v1/auth/me")).status, 401);
+    if (mode === "signup") {
+      const next = await a.get("/api/v1/auth/csrf");
+      assert.equal(
+        (
+          await a
+            .post("/api/v1/auth/login")
+            .set("Origin", "http://localhost:5173")
+            .set("X-CSRF-Token", next.body.data.csrf)
+            .send({
+              email: "member@example.com",
+              password: "signup-test-password",
+            })
+        ).status,
+        200,
+      );
+    }
+  }
+});

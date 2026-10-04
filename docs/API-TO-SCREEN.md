@@ -33,7 +33,7 @@ Client behaviour: a 401 on any non-login request dispatches a `session-expired` 
 - **Endpoints:** `GET /auth/csrf` then `POST /auth/login`.
 - **Request fields:** `email`, `password`. **Response:** `{ user, csrf }`.
 - **Actions:** sign in; show/hide password; link to `/about`.
-- **States:** idle, submitting, error (invalid credentials / rate limit / origin). No signup, OAuth, or reset — the backend has none.
+- **States:** idle, submitting, error (invalid credentials / rate limit / origin). Author signup and demo are available; OAuth, email verification, and password reset are not implemented. See AUTH-ACCESS.md.
 
 ## Overview — `/` (staff)
 
@@ -151,3 +151,7 @@ Idempotency: a protected mutation retried after a failure reuses the same `Idemp
 `POST /api/v1/appeals/:id/analyze` is available to the assigned independent reviewer from the appeal detail screen. It accepts `expectedRevision`, requires CSRF and an idempotency key, rejects active jobs and resolved appeals, and queues the requesting reviewer's credential plus model snapshot when connected. Otherwise it uses server analysis configuration. It returns HTTP 202 with `jobId` and `status`.
 
 Appeal detail includes `analysisJob` (status and sanitized error) for staff. Failed/pending retries do not authorize decisions using an earlier assessment; explicit manual review remains available. Resolution includes `visibility_applied`, which is false when a newer review governs content visibility.
+
+## Author access
+
+`POST /auth/signup` accepts `{name,email,password}` and creates only an AUTHOR. `POST /auth/demo` creates a unique demo author session. Both return `{user,csrf}` with HTTP 201, require CSRF/origin checks, rotate the anonymous session, and enforce account-creation rate limits. No public endpoint grants staff access.
