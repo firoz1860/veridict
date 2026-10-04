@@ -1,11 +1,18 @@
 import "dotenv/config";
-import { postgres } from "./db.js";
+import { postgres, migrate } from "./db.js";
 import { createApp } from "./app.js";
 import { workerLoop } from "./jobs.js";
 const origin = process.env.APP_ORIGIN;
 if (!origin) throw Error("APP_ORIGIN is required");
 new URL(origin);
 const db = postgres();
+try {
+  await migrate(db);
+  console.log(JSON.stringify({ event: "schema_ready" }));
+} catch (error) {
+  await db.close();
+  throw error;
+}
 const app = createApp(db, {
   origin,
   production: process.env.NODE_ENV === "production",
