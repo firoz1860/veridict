@@ -61,3 +61,7 @@ unset RESET_EMAIL RESET_PASSWORD
 ```
 
 This PR does not rotate deployed credentials or execute a deployment.
+
+## Startup schema upgrades
+
+The API runs the existing repeatable migrations before starting the worker or HTTP listener. If migration fails, startup fails instead of serving an incompatible schema. This also supports manually configured Render services without a pre-deploy command. Startup does not seed users or reset passwords.
