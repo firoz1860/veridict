@@ -35,22 +35,7 @@ export async function api<T>(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const b = await r
-    .json()
-    .catch(() => ({
-      error: {
-        message: "The API is unreachable. Check the deployment connection.",
-      },
-    }));
-  if (!r.ok) {
-    if (r.status === 401 && path !== "/auth/login")
-      window.dispatchEvent(new Event("session-expired"));
-    throw new ApiError(
-      r.status,
-      b.error?.message || "Request failed",
-      b.requestId,
-    );
-  }
+  const b = await readResponse(r, path);
   if (b.data?.csrf) csrf = b.data.csrf;
   return b.data as T;
 }
@@ -59,17 +44,36 @@ export function clearSession() {
 }
 export async function listApi<T>(path: string): Promise<Envelope<T[]>> {
   const r = await fetch("/api/v1" + path, { credentials: "include" });
-  const b = await r.json();
+  return readResponse(r, path);
+}
+async function readResponse(r: Response, path: string) {
+  if (r.status === 401 && path !== "/auth/login") {
+    clearSession();
+    window.dispatchEvent(new Event("session-expired"));
+  }
+  const b = await r.json().catch(() => null);
+  if (!b || typeof b !== "object")
+    throw new ApiError(
+      r.ok ? 502 : r.status,
+      "The API returned an invalid response. Check the deployment connection.",
+    );
   if (!r.ok) {
-    if (r.status === 401) window.dispatchEvent(new Event("session-expired"));
+    if (r.status === 403 && b.error?.code === "CSRF") clearSession();
     throw new ApiError(
       r.status,
       b.error?.message || "Request failed",
       b.requestId,
     );
   }
+  if (!("data" in b))
+    throw new ApiError(
+      502,
+      "The API response is missing data. Check the deployment connection.",
+      b.requestId,
+    );
   return b;
 }
+
 export function useData<T>(path: string, poll = 0) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(""),
